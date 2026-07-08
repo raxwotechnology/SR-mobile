@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Menu, X, ChevronRight, LogOut, Home } from 'lucide-react';
 import useAuthStore from '../store/authStore';
@@ -6,6 +6,7 @@ import useSettingsStore from '../store/settingsStore';
 import { adminNavGroups, getAdminNavGroups } from '../pages/admin/adminNavItems';
 import useAdminStoreStore from '../store/adminStoreStore';
 import { getAdminStores } from '../services/api';
+import { getImageUrl } from '../utils/imageHelper';
 
 // ─── Shared NavLink ────────────────────────────────────────────────────────────
 const NavLink = ({ item, location, collapsed, onNavigate }) => {
@@ -41,13 +42,30 @@ const NavLink = ({ item, location, collapsed, onNavigate }) => {
 
 // ─── Sidebar Content ───────────────────────────────────────────────────────────
 const SidebarContent = ({ navItems, collapsed, location, onNavigate }) => {
-  // Detect if navItems is a grouped array (array of { label, items })
+  const navRef = useRef(null);
+
+  useEffect(() => {
+    if (navRef.current) {
+      const savedScrollTop = sessionStorage.getItem('sidebar-scroll-top');
+      if (savedScrollTop) {
+        navRef.current.scrollTop = Number(savedScrollTop);
+      }
+    }
+  }, []);
+
+  const handleScroll = (e) => {
+    sessionStorage.setItem('sidebar-scroll-top', e.target.scrollTop);
+  };
+
   const isGrouped = navItems.length > 0 && navItems[0]?.items;
 
   if (!isGrouped) {
-    // Legacy flat list
     return (
-      <nav className="p-3 space-y-0.5 flex-1 overflow-y-auto">
+      <nav
+        ref={navRef}
+        onScroll={handleScroll}
+        className="p-3 space-y-0.5 flex-1 overflow-y-auto"
+      >
         {navItems.map(item => (
           <NavLink key={item.path} item={item} location={location} collapsed={collapsed} onNavigate={onNavigate} />
         ))}
@@ -56,7 +74,11 @@ const SidebarContent = ({ navItems, collapsed, location, onNavigate }) => {
   }
 
   return (
-    <nav className="p-2 flex-1 overflow-y-auto">
+    <nav
+      ref={navRef}
+      onScroll={handleScroll}
+      className="p-2 flex-1 overflow-y-auto"
+    >
       {navItems.map((group, gi) => (
         <div key={gi} className="mb-1">
           {!collapsed && (
@@ -90,7 +112,7 @@ const DashboardLayout = ({ children, navItems, title }) => {
 
   // Dynamically filter admin nav items based on user permissions
   let finalNavItems = navItems;
-  const isAdminNav = navItems === adminNavGroups || (Array.isArray(navItems) && navItems.length > 0 && navItems[0]?.label === 'Dashboard');
+  const isAdminNav = user?.role === 'admin' && (navItems === adminNavGroups || (Array.isArray(navItems) && navItems.length > 0 && navItems[0]?.label === 'Dashboard'));
   if (isAdminNav) {
     finalNavItems = getAdminNavGroups(user);
   }
@@ -110,7 +132,7 @@ const DashboardLayout = ({ children, navItems, title }) => {
 
   const brandName = settings?.shopName || 'Mobile Hub';
   // Use whichever logo field is populated (logoUrl is built by settingsStore from logo path)
-  const logoSrc = settings?.logoUrl || settings?.logo || '';
+  const logoSrc = getImageUrl(settings?.logoUrl || settings?.logo || '');
 
   // Close sidebar on route change (mobile)
   useEffect(() => {
@@ -192,9 +214,17 @@ const DashboardLayout = ({ children, navItems, title }) => {
         {/* User + logout */}
         <div className="flex items-center gap-2">
           <div className="hidden sm:flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5">
-            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-blue-400 to-indigo-500 flex items-center justify-center text-white text-xs font-bold">
-              {user?.name?.charAt(0)?.toUpperCase() || 'U'}
-            </div>
+            {user?.avatar ? (
+              <img
+                src={getImageUrl(user.avatar)}
+                alt="Profile"
+                className="w-7 h-7 rounded-lg object-cover border border-slate-200"
+              />
+            ) : (
+              <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-blue-400 to-indigo-500 flex items-center justify-center text-white text-xs font-bold">
+                {user?.name?.charAt(0)?.toUpperCase() || 'U'}
+              </div>
+            )}
             <div>
               <p className="text-[12px] font-semibold text-slate-800 leading-tight">{user?.name}</p>
               <p className="text-[10px] text-slate-400 capitalize leading-tight">{user?.role}</p>

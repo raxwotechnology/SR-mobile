@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Plus, Edit2, Trash2, X, Search, Package, Upload, ImageIcon } from 'lucide-react';
 import DashboardLayout from '../../components/DashboardLayout';
+import DeleteConfirmationModal from '../../components/DeleteConfirmationModal';
 import { getMyStoreProducts, createProduct, updateProduct, deleteProduct, getCategories, getStores, uploadImage } from '../../services/api';
 import useCurrencyStore from '../../store/currencyStore';
 import { toast } from 'react-toastify';
@@ -34,6 +35,8 @@ const StoreProducts = () => {
 
   const [search, setSearch] = useState('');
   const [saving, setSaving] = useState(false);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState(null);
   const [error, setError] = useState('');
 
   const fetchProducts = async () => {
@@ -135,15 +138,17 @@ const StoreProducts = () => {
     }
   };
 
-  const handleDelete = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this product?')) return;
+  const handleDeleteClick = (product) => {
+    setItemToDelete(product);
+    setDeleteModalOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
     try {
-      await deleteProduct(id);
+      await deleteProduct(itemToDelete._id);
       toast.success('Product deleted');
       fetchProducts();
-    } catch (err) {
-      toast.error('Failed to delete product');
-    }
+    } catch (err) { toast.error('Failed to delete product'); }
   };
 
   const [categoryFilter, setCategoryFilter] = useState('all');
@@ -347,7 +352,7 @@ const StoreProducts = () => {
                         <button onClick={() => openEdit(product)} className="p-2 rounded-lg hover:bg-blue-50 text-blue-500 transition-colors">
                           <Edit2 size={16} />
                         </button>
-                        <button onClick={() => handleDelete(product._id)} className="p-2 rounded-lg hover:bg-red-50 text-red-500 transition-colors">
+                        <button onClick={() => handleDeleteClick(product)} className="p-2 rounded-lg hover:bg-red-50 text-red-500 transition-colors">
                           <Trash2 size={16} />
                         </button>
                       </div>
@@ -541,6 +546,13 @@ const StoreProducts = () => {
           </div>
         )}
       </div>
+
+      <DeleteConfirmationModal
+        isOpen={deleteModalOpen}
+        onClose={() => { setDeleteModalOpen(false); setItemToDelete(null); }}
+        onConfirm={handleDeleteConfirm}
+        itemName={itemToDelete?.name || 'this product'}
+      />
     </DashboardLayout>
   );
 };

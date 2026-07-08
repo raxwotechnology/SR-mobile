@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Wallet, Search, ArrowLeft, CreditCard, TrendingUp, TrendingDown, DollarSign, Calendar, Download, ChevronDown, X, FileText, FileSpreadsheet, Edit2, Trash2, Save, CheckCircle, Clock, AlertTriangle, RefreshCw } from 'lucide-react';
 import DashboardLayout from '../../components/DashboardLayout';
+import DeleteConfirmationModal from '../../components/DeleteConfirmationModal';
 import { adminNavGroups as navItems } from './adminNavItems';
 import { getSupplierPaymentSummary, getSupplierLedger, recordSupplierPayment, recordSupplierPurchase, getSupplierPayments, updateSupplierTransaction, deleteSupplierTransaction, updateSupplierChequeStatus } from '../../services/api';
 
@@ -27,6 +28,8 @@ const AdminSupplierPayments = () => {
   const [purchaseForm, setPurchaseForm] = useState({ totalCost: '', amountPaid: '', description: '' });
   const [editTx, setEditTx] = useState(null); // transaction being edited
   const [editForm, setEditForm] = useState({ amount: '', description: '', date: '' });
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState(null);
 
   const fetchSummary = useCallback(async (isRefresh = false) => {
     try {
@@ -168,10 +171,14 @@ const AdminSupplierPayments = () => {
     }
   };
 
-  const handleDeleteTx = async (id) => {
-    if (!window.confirm('Delete this transaction? This cannot be undone.')) return;
+  const handleDeleteClick = (transaction) => {
+    setItemToDelete(transaction);
+    setDeleteModalOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
     try {
-      await deleteSupplierTransaction(id);
+      await deleteSupplierTransaction(itemToDelete._id);
       toast.success('Transaction deleted');
       openLedger(selectedSupplier);
       fetchSummary(true);
@@ -330,7 +337,7 @@ const AdminSupplierPayments = () => {
                               <button onClick={() => handleEditTx(t)} title="Edit" style={{ background: '#eff6ff', color: '#2563eb', border: 'none', borderRadius: '6px', padding: '4px 8px', cursor: 'pointer' }}>
                                 <Edit2 size={13} />
                               </button>
-                              <button onClick={() => handleDeleteTx(t._id)} title="Delete" style={{ background: '#fef2f2', color: '#dc2626', border: 'none', borderRadius: '6px', padding: '4px 8px', cursor: 'pointer' }}>
+                              <button onClick={() => handleDeleteClick(t)} title="Delete" style={{ background: '#fef2f2', color: '#dc2626', border: 'none', borderRadius: '6px', padding: '4px 8px', cursor: 'pointer' }}>
                                 <Trash2 size={13} />
                               </button>
                             </div>
@@ -690,6 +697,13 @@ const AdminSupplierPayments = () => {
           </div>
         )}
       </div>
+
+      <DeleteConfirmationModal
+        isOpen={deleteModalOpen}
+        onClose={() => { setDeleteModalOpen(false); setItemToDelete(null); }}
+        onConfirm={handleDeleteConfirm}
+        itemName="this transaction"
+      />
     </DashboardLayout>
   );
 };

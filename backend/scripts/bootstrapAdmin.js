@@ -45,6 +45,14 @@ const bootstrapUsers = async () => {
       role: 'manager',
       phone: '+94772345678',
       isActive: true,
+      permissions: {
+        employees: true,
+        products: true,
+        sales: true,
+        suppliers: true,
+        reports: true,
+        inventory: true
+      }
     });
     console.log('✅ Manager created:', manager.email);
 
@@ -92,6 +100,14 @@ const bootstrapUsers = async () => {
       role: 'manager',
       phone: '+94776789012',
       isActive: true,
+      permissions: {
+        employees: true,
+        products: true,
+        sales: true,
+        suppliers: true,
+        reports: true,
+        inventory: true
+      }
     });
     console.log('✅ Manager 2 created:', manager2.email);
 

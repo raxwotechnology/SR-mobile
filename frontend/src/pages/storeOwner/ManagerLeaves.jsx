@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Calendar, Check, X, Clock, FileText, FileSpreadsheet } from 'lucide-react';
 import DashboardLayout from '../../components/DashboardLayout';
 import { toast } from 'react-toastify';
-import { managerNavGroups as navItems } from './managerNavItems';
+import { managerNavGroups } from './managerNavItems';
 import { getEmployees, adminCreateLeave } from '../../services/api';
 import API from '../../services/api';
 import * as XLSX from 'xlsx';
@@ -15,7 +15,7 @@ const statusColors = {
   rejected: 'bg-red-100 text-red-700',
 };
 
-const ManagerLeaves = ({ navItems = managerNavItems, title = 'Manager Dashboard' }) => {
+const ManagerLeaves = ({ navItems = managerNavGroups, title = 'Manager Dashboard' }) => {
   const [leaves, setLeaves] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');

@@ -5,6 +5,7 @@ const {
   createStockReceipt,
   listStockReceipts,
   getReceiptByGRN,
+  deleteStockReceipt,
   getNextGrn,
   searchGrnNumbers,
   createSupplierReturn,
@@ -24,6 +25,8 @@ router.get('/grn-search', searchGrnNumbers);
 router.route('/receipts')
   .get(listStockReceipts)
   .post(createStockReceipt);
+
+router.delete('/receipts/:id', authorize('admin'), deleteStockReceipt);
 
 router.get('/receipts/grn/:grnNumber', getReceiptByGRN);
 

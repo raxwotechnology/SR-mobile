@@ -383,16 +383,36 @@ const updateEmployee = async (req, res, next) => {
     const employee = await User.findById(req.params.id);
     if (!employee) { res.status(404); return next(new Error('Employee not found')); }
 
-    if (req.body.salary !== undefined) employee.employeeInfo.salary = req.body.salary;
-    if (req.body.department) employee.employeeInfo.department = req.body.department;
-    if (req.body.bankAccount) employee.employeeInfo.bankAccount = req.body.bankAccount;
-    if (req.body.bankName) employee.employeeInfo.bankName = req.body.bankName;
-    if (req.body.epfNo) employee.employeeInfo.epfNo = req.body.epfNo;
-    if (req.body.etfNo) employee.employeeInfo.etfNo = req.body.etfNo;
-    if (req.body.assignedStore) employee.assignedStore = req.body.assignedStore;
+    if (req.body.name) employee.name = req.body.name;
+    if (req.body.email && req.body.email !== employee.email) {
+      const emailExists = await User.findOne({ email: req.body.email });
+      if (emailExists) {
+        res.status(400);
+        return next(new Error('Email is already taken by another user'));
+      }
+      employee.email = req.body.email;
+    }
+    if (req.body.password) employee.password = req.body.password;
+    if (req.body.phone !== undefined) employee.phone = req.body.phone;
+    if (req.body.role) employee.role = req.body.role;
+    if (req.body.assignedStore !== undefined) employee.assignedStore = req.body.assignedStore || undefined;
+
+    if (!employee.employeeInfo) employee.employeeInfo = {};
+    if (req.body.salary !== undefined) employee.employeeInfo.salary = Number(req.body.salary) || 0;
+    if (req.body.department !== undefined) employee.employeeInfo.department = req.body.department;
+    if (req.body.bankAccount !== undefined) employee.employeeInfo.bankAccount = req.body.bankAccount;
+    if (req.body.bankName !== undefined) employee.employeeInfo.bankName = req.body.bankName;
+    if (req.body.bankBranch !== undefined) employee.employeeInfo.bankBranch = req.body.bankBranch;
+    if (req.body.epfNo !== undefined) employee.employeeInfo.epfNo = req.body.epfNo;
+    if (req.body.etfNo !== undefined) employee.employeeInfo.etfNo = req.body.etfNo;
 
     await employee.save();
-    res.json(employee);
+    
+    const result = await User.findById(employee._id)
+      .select('-password')
+      .populate('assignedStore', 'name');
+
+    res.json(result);
   } catch (error) { next(error); }
 };
 
@@ -401,7 +421,7 @@ const updateEmployee = async (req, res, next) => {
 // @access  Private/Manager/Admin
 const addEmployee = async (req, res, next) => {
   try {
-    const { name, email, password, phone, role, salary, department, bankAccount, bankName, epfNo, etfNo } = req.body;
+    const { name, email, password, phone, role, salary, department, bankAccount, bankName, bankBranch, epfNo, etfNo } = req.body;
 
     if (!name || !email || !password) {
       res.status(400);
@@ -443,6 +463,7 @@ const addEmployee = async (req, res, next) => {
         joinDate: new Date(),
         bankAccount: bankAccount || '',
         bankName: bankName || '',
+        bankBranch: bankBranch || '',
         epfNo: epfNo || '',
         etfNo: etfNo || '',
       },
@@ -870,10 +891,25 @@ const adminCreateLeave = async (req, res, next) => {
   } catch (error) { next(error); }
 };
 
+// @desc    Delete employee
+// @route   DELETE /api/hr/employees/:id
+// @access  Private/Manager/Admin
+const deleteEmployee = async (req, res, next) => {
+  try {
+    const employee = await User.findById(req.params.id);
+    if (!employee) {
+      res.status(404);
+      return next(new Error('Employee not found'));
+    }
+    await employee.deleteOne();
+    res.json({ message: 'Employee deleted successfully' });
+  } catch (error) { next(error); }
+};
+
 module.exports = {
   checkIn, checkOut, getMyAttendance, getAttendanceReport,
   requestLeave, getMyLeaves, getStoreLeaves, approveLeave, rejectLeave,
-  getEmployees, addEmployee, updateEmployee,
+  getEmployees, addEmployee, updateEmployee, deleteEmployee,
   startBreak, endBreak, getBreakHistory, getActiveBreak,
   createTarget, getTargets, getMyTargets, updateTargetProgress, payTargetBonus,
   getEmployeePerformance,

@@ -8,12 +8,15 @@ const {
   toggleUserStatus,
   deleteUser,
   getAllStores,
+  getStoreSummaries,
   toggleStore,
   getAllOrders,
   getAllProducts,
   approveOrder,
   cancelOrder,
+  deleteOrder,
   getStats,
+  updateOrderAdmin,
 } = require('../controllers/adminController');
 const { protect, authorize, requirePermission } = require('../middleware/authMiddleware');
 
@@ -35,13 +38,16 @@ router.put('/users/:id/role', requirePermission('employees'), updateUserRole);
 router.put('/users/:id/toggle-status', requirePermission('employees'), toggleUserStatus);
 
 // Stores / Settings (requires 'settings' permission)
+router.get('/stores/summaries', requirePermission('settings'), getStoreSummaries);
 router.get('/stores', requirePermission('settings'), getAllStores);
 router.put('/stores/:id/toggle', requirePermission('settings'), toggleStore);
 
 // Orders / Sales (requires 'sales' permission)
 router.get('/orders', requirePermission('sales'), getAllOrders);
+router.put('/orders/:id', requirePermission('sales'), updateOrderAdmin);
 router.put('/orders/:id/approve', requirePermission('sales'), approveOrder);
 router.put('/orders/:id/cancel', requirePermission('sales'), cancelOrder);
+router.delete('/orders/:id', requirePermission('sales'), deleteOrder);
 
 // Products (requires 'products' or 'suppliers' permission for GRN)
 router.get('/products', (req, res, next) => {

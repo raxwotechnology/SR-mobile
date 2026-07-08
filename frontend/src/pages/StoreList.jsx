@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { MapPin, Clock, Phone, Star, ArrowRight } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { getStores } from '../services/api';
+import { getImageUrl } from '../utils/imageHelper';
 
 const StoreList = () => {
   const [stores, setStores] = useState([]);
@@ -63,7 +64,7 @@ const StoreList = () => {
                   {/* Banner */}
                   <div className="relative h-48 overflow-hidden">
                     <img
-                      src={store.bannerImage || 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=800'}
+                      src={getImageUrl(store.bannerImage) || 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=800'}
                       alt={store.name}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                     />
@@ -72,7 +73,7 @@ const StoreList = () => {
                     <div className="absolute bottom-4 left-4 flex items-center gap-3">
                       <div className="w-14 h-14 rounded-full border-3 border-white overflow-hidden bg-white shadow-lg">
                         <img
-                          src={store.logo || 'https://via.placeholder.com/100'}
+                          src={getImageUrl(store.logo) || 'https://via.placeholder.com/100'}
                           alt=""
                           className="w-full h-full object-cover"
                         />

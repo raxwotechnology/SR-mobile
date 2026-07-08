@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, User, Clock, Calendar, CreditCard,
-  Monitor, Truck, Package, Barcode, Timer, Globe,
+  Monitor, Truck, Package, Barcode, Timer, Globe, Wrench,
 } from 'lucide-react';
 
 const getEmployeeNavGroups = (role) => {
@@ -32,6 +32,7 @@ const getEmployeeNavGroups = (role) => {
   const tools = [];
   if (role === 'cashier') {
     tools.push({ path: '/pos',                label: 'POS Terminal',       icon: Monitor });
+    tools.push({ path: '/employee/repairs',   label: 'Device Repairs',     icon: Wrench });
     tools.push({ path: '/employee/stock',     label: 'Stock View',         icon: Package });
     tools.push({ path: '/barcode-generator',  label: 'Barcode Generator',  icon: Barcode });
   }

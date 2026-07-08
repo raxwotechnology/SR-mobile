@@ -1,6 +1,9 @@
 const Transaction = require('../models/Transaction');
 const Store = require('../models/Store');
 const Order = require('../models/Order');
+const PettyCash = require('../models/PettyCash');
+const TaxPayment = require('../models/TaxPayment');
+const Account = require('../models/Account');
 
 // @desc    Get full ledger dashboard
 // @route   GET /api/finance/dashboard
@@ -45,6 +48,50 @@ const getFinancialDashboard = async (req, res, next) => {
     
     const totalIncome = orderRevenue + manualIncome;
     const balance = totalIncome - totalExpense;
+
+    // Segment profits: Mobiles vs Accessories
+    const productIds = [];
+    orders.forEach(o => {
+      (o.items || []).forEach(it => {
+        if (it.productId) productIds.push(it.productId);
+      });
+    });
+
+    const Product = require('../models/Product');
+    const products = await Product.find({ _id: { $in: productIds } }).populate('categoryId').lean();
+    const productCategoryMap = new Map();
+    products.forEach(p => {
+      const catName = p.categoryId?.name || '';
+      const isMobile = /mobile|phone|tablet|smartphone/i.test(catName) || !!p.ram || !!p.storage || (p.imei && p.imei.length > 0);
+      productCategoryMap.set(p._id.toString(), isMobile ? 'mobiles' : 'accessories');
+    });
+
+    const profitSegments = {
+      mobiles: { revenue: 0, profit: 0 },
+      accessories: { revenue: 0, profit: 0 }
+    };
+
+    orders.forEach(o => {
+      (o.items || []).forEach(it => {
+        const prodId = it.productId ? it.productId.toString() : '';
+        const segment = productCategoryMap.get(prodId) || 'accessories';
+        const itemRevenue = (it.price || 0) * (it.quantity || 0);
+        const unitCost = it.unitCostAtSale !== undefined && it.unitCostAtSale !== null ? it.unitCostAtSale : 0;
+        const itemProfit = itemRevenue - (unitCost * (it.quantity || 0));
+
+        profitSegments[segment].revenue += itemRevenue;
+        profitSegments[segment].profit += itemProfit;
+      });
+    });
+
+    // Fetch Income Tax Payments in range
+    const taxFilter = {};
+    if (storeFilter.storeId) taxFilter.storeId = storeFilter.storeId;
+    if (Object.keys(dateFilter).length > 0) {
+      taxFilter.paymentDate = dateFilter;
+    }
+    const taxPayments = await TaxPayment.find(taxFilter);
+    const totalTaxPaid = taxPayments.reduce((sum, tp) => sum + (tp.amount || 0), 0);
 
     // Charts generation
     const p = ['daily', 'monthly', 'yearly'].includes(String(period)) ? String(period) : 'monthly';
@@ -105,9 +152,11 @@ const getFinancialDashboard = async (req, res, next) => {
       totalAdditionalIncome: manualIncome,
       totalIncome,
       totalExpense,
-      totalExpenses: totalExpense,
+      totalExpenses: totalExpense + totalTaxPaid,
+      totalTaxPaid,
+      profitSegments,
       balance,
-      netProfit: balance,
+      netProfit: balance - totalTaxPaid,
       orderCount,
       totalItemsSold,
       expenseCount: transactions.filter(t => t.type === 'expense').length,
@@ -125,7 +174,7 @@ const getFinancialDashboard = async (req, res, next) => {
 // @access  Private
 const createTransaction = async (req, res, next) => {
   try {
-    const { storeId, type, category, amount, paymentMethod, referenceNo, description, date, attachments } = req.body;
+    const { storeId, accountId, type, category, amount, paymentMethod, referenceNo, description, date, chequeDetails } = req.body;
 
     let assignedStore = storeId;
     if (!assignedStore && req.user.role === 'manager') {
@@ -133,17 +182,19 @@ const createTransaction = async (req, res, next) => {
       if (store) assignedStore = store._id;
     }
 
-    const transaction = await Transaction.create({
+    const { recordTransaction } = require('../services/ledgerService');
+    const transaction = await recordTransaction({
       storeId: assignedStore || null,
+      accountId,
       type,
       category,
-      amount,
+      amount: Number(amount),
       paymentMethod: paymentMethod || 'Cash',
+      chequeDetails,
       referenceNo,
       description,
-      date: date || new Date(),
       createdBy: req.user._id,
-      attachments: attachments || []
+      date: date || new Date()
     });
 
     res.status(201).json(transaction);
@@ -277,6 +328,360 @@ const updateChequeStatus = async (req, res, next) => {
   } catch (error) { next(error); }
 };
 
+// Petty Cash Controllers
+// @desc    Get Petty Cash Log
+// @route   GET /api/finance/petty-cash
+// @access  Private
+const getPettyCashLog = async (req, res, next) => {
+  try {
+    const { startDate, endDate, storeId, type } = req.query;
+    const filter = {};
+
+    let assignedStore = storeId;
+    if (req.user.role === 'manager') {
+      const store = await Store.findOne({ managerId: req.user._id });
+      if (store) assignedStore = store._id;
+    }
+
+    if (assignedStore && assignedStore !== 'all') {
+      filter.storeId = assignedStore;
+    }
+
+    if (type) filter.type = type;
+
+    if (startDate || endDate) {
+      filter.date = {};
+      if (startDate) filter.date.$gte = new Date(startDate);
+      if (endDate) filter.date.$lte = new Date(endDate);
+    }
+
+    const logs = await PettyCash.find(filter)
+      .populate('accountId', 'name type')
+      .populate('loggedBy', 'name')
+      .populate('storeId', 'name')
+      .sort({ date: -1 });
+
+    res.json(logs);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Create Petty Cash Entry
+// @route   POST /api/finance/petty-cash
+// @access  Private
+const createPettyCashEntry = async (req, res, next) => {
+  try {
+    const { storeId, type, amount, description, referenceNo, accountId, date } = req.body;
+
+    let assignedStore = storeId;
+    if (!assignedStore && req.user.role === 'manager') {
+      const store = await Store.findOne({ managerId: req.user._id });
+      if (store) assignedStore = store._id;
+    }
+    if (!assignedStore) {
+      res.status(400);
+      return next(new Error('Store ID is required'));
+    }
+
+    const { recordTransaction, recordTransfer } = require('../services/ledgerService');
+
+    // 1. If type is 'out' (spending cash)
+    if (type === 'out') {
+      let targetAccountId = accountId;
+      if (!targetAccountId) {
+        let cashAccount = await Account.findOne({ storeId: assignedStore, type: 'Cash', isDefault: true });
+        if (!cashAccount) {
+          cashAccount = await Account.findOne({ storeId: assignedStore, type: 'Cash' });
+        }
+        if (!cashAccount) {
+          res.status(400);
+          return next(new Error('No Cash account found for this store to deduct petty cash from.'));
+        }
+        targetAccountId = cashAccount._id;
+      }
+
+      await recordTransaction({
+        storeId: assignedStore,
+        accountId: targetAccountId,
+        type: 'expense',
+        category: 'Petty Cash',
+        amount,
+        paymentMethod: 'Cash',
+        referenceNo,
+        description: description || 'Petty Cash Out',
+        createdBy: req.user._id,
+        date: date || new Date()
+      });
+
+      const pettyCash = await PettyCash.create({
+        storeId: assignedStore,
+        type,
+        amount,
+        description,
+        referenceNo,
+        accountId: targetAccountId,
+        loggedBy: req.user._id,
+        date: date || new Date()
+      });
+
+      res.status(201).json(pettyCash);
+    } 
+    // 2. If type is 'in' (depositing cash from bank account)
+    else if (type === 'in') {
+      if (!accountId) {
+        res.status(400);
+        return next(new Error('Account ID (Bank/Wallet) is required for Petty Cash deposit (Cash In)'));
+      }
+
+      let cashAccount = await Account.findOne({ storeId: assignedStore, type: 'Cash', isDefault: true });
+      if (!cashAccount) {
+        cashAccount = await Account.findOne({ storeId: assignedStore, type: 'Cash' });
+      }
+      if (!cashAccount) {
+        res.status(400);
+        return next(new Error('No Cash account found for this store to deposit petty cash into.'));
+      }
+
+      await recordTransfer({
+        storeId: assignedStore,
+        fromAccountId: accountId,
+        toAccountId: cashAccount._id,
+        amount,
+        referenceNo,
+        description: description || 'Petty Cash In from Bank',
+        createdBy: req.user._id
+      });
+
+      const pettyCash = await PettyCash.create({
+        storeId: assignedStore,
+        type,
+        amount,
+        description,
+        referenceNo,
+        accountId,
+        loggedBy: req.user._id,
+        date: date || new Date()
+      });
+
+      res.status(201).json(pettyCash);
+    } else {
+      res.status(400);
+      return next(new Error('Invalid petty cash type'));
+    }
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Tax Payment Controllers
+// @desc    Get Tax Payments
+// @route   GET /api/finance/tax-payments
+// @access  Private
+const getTaxPayments = async (req, res, next) => {
+  try {
+    const { startDate, endDate, storeId, year } = req.query;
+    const filter = {};
+
+    let assignedStore = storeId;
+    if (req.user.role === 'manager') {
+      const store = await Store.findOne({ managerId: req.user._id });
+      if (store) assignedStore = store._id;
+    }
+
+    if (assignedStore && assignedStore !== 'all') {
+      filter.storeId = assignedStore;
+    }
+
+    if (year) filter.year = Number(year);
+
+    if (startDate || endDate) {
+      filter.paymentDate = {};
+      if (startDate) filter.paymentDate.$gte = new Date(startDate);
+      if (endDate) filter.paymentDate.$lte = new Date(endDate);
+    }
+
+    const payments = await TaxPayment.find(filter)
+      .populate('createdBy', 'name')
+      .populate('storeId', 'name')
+      .sort({ paymentDate: -1 });
+
+    res.json(payments);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Create Tax Payment
+// @route   POST /api/finance/tax-payments
+// @access  Private
+const createTaxPayment = async (req, res, next) => {
+  try {
+    const { storeId, year, period, amount, paymentDate, referenceNo, notes, accountId } = req.body;
+
+    let assignedStore = storeId;
+    if (!assignedStore && req.user.role === 'manager') {
+      const store = await Store.findOne({ managerId: req.user._id });
+      if (store) assignedStore = store._id;
+    }
+    if (!assignedStore) {
+      res.status(400);
+      return next(new Error('Store ID is required'));
+    }
+
+    if (accountId) {
+      const { recordTransaction } = require('../services/ledgerService');
+      await recordTransaction({
+        storeId: assignedStore,
+        accountId,
+        type: 'expense',
+        category: 'Tax Payment',
+        amount,
+        paymentMethod: 'Bank Transfer',
+        referenceNo,
+        description: notes || `Tax Payment - Period: ${period}, Year: ${year}`,
+        createdBy: req.user._id,
+        date: paymentDate || new Date()
+      });
+    }
+
+    const taxPayment = await TaxPayment.create({
+      storeId: assignedStore,
+      year,
+      period,
+      amount,
+      paymentDate: paymentDate || new Date(),
+      referenceNo,
+      notes,
+      createdBy: req.user._id
+    });
+
+    res.status(201).json(taxPayment);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get Detailed Profit Report
+// @route   GET /api/finance/profit-report
+// @access  Private
+const getProfitReport = async (req, res, next) => {
+  try {
+    const { startDate, endDate, storeId, category, brand } = req.query;
+    const filter = { orderStatus: { $in: ['delivered', 'completed'] } };
+
+    let assignedStore = storeId;
+    if (req.user.role === 'manager') {
+      const store = await Store.findOne({ managerId: req.user._id });
+      if (store) assignedStore = store._id;
+    }
+
+    if (assignedStore && assignedStore !== 'all') {
+      filter.storeId = assignedStore;
+    }
+
+    if (startDate || endDate) {
+      filter.createdAt = {};
+      if (startDate) filter.createdAt.$gte = new Date(startDate);
+      if (endDate) filter.createdAt.$lte = new Date(endDate);
+    }
+
+    const orders = await Order.find(filter)
+      .populate({
+        path: 'items.productId',
+        populate: { path: 'categoryId', select: 'name' }
+      })
+      .lean();
+
+    const items = [];
+    const categoryAgg = {};
+    const brandAgg = {};
+
+    let totalRevenue = 0;
+    let totalCost = 0;
+    let totalProfit = 0;
+
+    orders.forEach(order => {
+      (order.items || []).forEach(item => {
+        const product = item.productId;
+        if (!product) return;
+
+        const categoryName = product.categoryId?.name || 'Uncategorized';
+        const productBrand = product.brand || 'Unbranded';
+
+        if (category && category !== 'all') {
+          if (category === 'mobiles') {
+            const isMobile = /mobile|phone|tablet|smartphone/i.test(categoryName) || !!product.ram || !!product.storage;
+            if (!isMobile) return;
+          } else if (category === 'accessories') {
+            const isMobile = /mobile|phone|tablet|smartphone/i.test(categoryName) || !!product.ram || !!product.storage;
+            if (isMobile) return;
+          } else if (String(product.categoryId?._id) !== String(category)) {
+            return;
+          }
+        }
+
+        if (brand && brand !== 'all' && productBrand.toLowerCase() !== brand.toLowerCase()) {
+          return;
+        }
+
+        const qty = item.quantity || 0;
+        const revenue = (item.price || 0) * qty;
+        const unitCost = item.unitCostAtSale !== undefined ? item.unitCostAtSale : (product.buyingPrice || 0);
+        const cost = unitCost * qty;
+        const profit = revenue - cost;
+
+        totalRevenue += revenue;
+        totalCost += cost;
+        totalProfit += profit;
+
+        items.push({
+          date: order.createdAt,
+          invoiceNumber: order.invoiceNumber || order._id.toString().slice(-8).toUpperCase(),
+          name: item.name,
+          category: categoryName,
+          brand: productBrand,
+          costPrice: unitCost,
+          sellingPrice: item.price,
+          quantity: qty,
+          totalCost: cost,
+          totalRevenue: revenue,
+          profit,
+          margin: revenue > 0 ? Math.round((profit / revenue) * 1000) / 10 : 0
+        });
+
+        if (!categoryAgg[categoryName]) {
+          categoryAgg[categoryName] = { name: categoryName, revenue: 0, cost: 0, profit: 0 };
+        }
+        categoryAgg[categoryName].revenue += revenue;
+        categoryAgg[categoryName].cost += cost;
+        categoryAgg[categoryName].profit += profit;
+
+        if (!brandAgg[productBrand]) {
+          brandAgg[productBrand] = { name: productBrand, revenue: 0, cost: 0, profit: 0 };
+        }
+        brandAgg[productBrand].revenue += revenue;
+        brandAgg[productBrand].cost += cost;
+        brandAgg[productBrand].profit += profit;
+      });
+    });
+
+    res.json({
+      summary: {
+        totalRevenue,
+        totalCost,
+        totalProfit,
+        profitMargin: totalRevenue > 0 ? Math.round((totalProfit / totalRevenue) * 1000) / 10 : 0
+      },
+      items,
+      byCategory: Object.values(categoryAgg),
+      byBrand: Object.values(brandAgg)
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   getFinancialDashboard,
   createTransaction,
@@ -285,5 +690,10 @@ module.exports = {
   deleteTransaction,
   getCheques,
   updateChequeStatus,
+  getPettyCashLog,
+  createPettyCashEntry,
+  getTaxPayments,
+  createTaxPayment,
+  getProfitReport,
 };
 

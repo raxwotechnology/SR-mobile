@@ -12,6 +12,10 @@ const stockTransferSchema = mongoose.Schema(
       }
     ],
     status: { type: String, enum: ['pending', 'in_transit', 'completed', 'cancelled'], default: 'pending' },
+    transferType: { type: String, enum: ['cash', 'credit'], default: 'cash' },
+    totalAmount: { type: Number, default: 0 },
+    amountPaid: { type: Number, default: 0 },
+    outstandingBalance: { type: Number, default: 0 },
     dispatchedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     receivedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     dispatchedAt: { type: Date },

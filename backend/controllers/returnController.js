@@ -14,6 +14,11 @@ const resolveStoreId = async (req) => {
     const store = await Store.findOne({ managerId: req.user._id }).select('_id').lean();
     return store?._id || null;
   }
+  if (req.user.role === 'cashier' || req.user.role === 'stockEmployee') {
+    if (req.user.assignedStore) return req.user.assignedStore;
+    const store = await Store.findOne({ isActive: true }).select('_id').lean();
+    return store?._id || null;
+  }
   return req.body?.storeId || req.query?.storeId || null;
 };
 
@@ -22,10 +27,35 @@ const resolveStoreId = async (req) => {
 // @access  Private/Cashier/Manager/Admin
 const getReturnOrder = async (req, res, next) => {
   try {
-    const order = await Order.findById(req.params.id)
-      .populate('storeId', 'name')
-      .populate('userId', 'name email')
-      .lean();
+    const mongoose = require('mongoose');
+    const idOrInvoice = req.params.id || '';
+    
+    let order;
+    if (mongoose.Types.ObjectId.isValid(idOrInvoice)) {
+      order = await Order.findById(idOrInvoice)
+        .populate('storeId', 'name')
+        .populate('userId', 'name email')
+        .lean();
+    } else {
+      // Try searching by relaxed invoice pattern matching!
+      let clean = idOrInvoice.toUpperCase().replace(/^INV-?/, '').replace(/\s+/g, '');
+      clean = clean.replace(/[\u2010\u2011\u2012\u2013\u2014\u2212]/g, '-');
+      clean = clean.replace(/-/g, '');
+      
+      let pattern;
+      if (/^\d{12}$/.test(clean)) {
+        const datePart = clean.slice(0, 8);
+        const seqPart = clean.slice(8);
+        pattern = `^INV-?${datePart}-?${seqPart}$`;
+      } else {
+        pattern = `^INV-?${clean}$`;
+      }
+      
+      order = await Order.findOne({ invoiceNumber: { $regex: new RegExp(pattern, 'i') } })
+        .populate('storeId', 'name')
+        .populate('userId', 'name email')
+        .lean();
+    }
 
     if (!order) {
       res.status(404);
@@ -230,6 +260,36 @@ const approveCustomerReturn = async (req, res, next) => {
       ret.upgradePaymentMethod = upgradePaymentMethod || ret.upgradePaymentMethod;
     }
 
+    // Record ledger income for remainder difference
+    const totalReturnValue = ret.items.reduce((sum, item) => sum + (item.unitPrice * item.qty), 0);
+    let creditedOrRefundedAmount = totalReturnValue;
+
+    if (resolution === 'store_credit') {
+      const settings = await Settings.findOne().lean();
+      const pointValue = settings?.loyaltyPointValue || 1;
+      creditedOrRefundedAmount = Number(storeCreditPoints || 0) * pointValue;
+    } else if (req.body.refundAmount !== undefined) {
+      creditedOrRefundedAmount = Number(req.body.refundAmount);
+    }
+
+    const remainder = totalReturnValue - creditedOrRefundedAmount;
+    if (remainder > 0) {
+      const { recordTransaction } = require('../services/ledgerService');
+      const Account = require('../models/Account');
+      const defaultAccount = await Account.findOne({ isDefault: true }).lean() || await Account.findOne().lean();
+
+      await recordTransaction({
+        storeId: ret.storeId || null,
+        accountId: defaultAccount?._id || undefined,
+        type: 'income',
+        category: 'Returns & Exchange',
+        amount: remainder,
+        paymentMethod: 'Cash',
+        description: `Unpaid remainder from return approval ${ret.holdBillNo || ret._id.toString().slice(-8)}. Return Value: Rs. ${totalReturnValue.toFixed(2)}, Refunded/Credited: Rs. ${creditedOrRefundedAmount.toFixed(2)}`,
+        createdBy: req.user._id,
+      });
+    }
+
     ret.resolution = resolution;
     ret.status = markResolved ? 'resolved' : 'on_hold';
     ret.holdStatus = markResolved ? 'closed' : 'open';
@@ -418,6 +478,28 @@ const exportCustomerReturnsPdf = async (req, res, next) => {
   } catch (error) { next(error); }
 };
 
+// @desc    Delete customer return request
+// @route   DELETE /api/returns/customer/:id
+// @access  Private/Admin
+const deleteCustomerReturn = async (req, res, next) => {
+  try {
+    const ret = await CustomerReturn.findById(req.params.id);
+    if (!ret) {
+      res.status(404);
+      return next(new Error('Return request not found'));
+    }
+    
+    if (ret.orderId) {
+      await Order.findByIdAndUpdate(ret.orderId, {
+        $unset: { returnStatus: '', customerReturnId: '' }
+      });
+    }
+
+    await ret.deleteOne();
+    res.json({ success: true, message: 'Return request deleted' });
+  } catch (error) { next(error); }
+};
+
 module.exports = {
   getReturnOrder,
   createCustomerReturn,
@@ -427,5 +509,6 @@ module.exports = {
   managerApproveCustomerReturn,
   managerRejectCustomerReturn,
   exportCustomerReturnsPdf,
+  deleteCustomerReturn,
 };
 

@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import DashboardLayout from '../../components/DashboardLayout';
 import { adminNavGroups as navItems } from './adminNavItems';
 import { toast } from 'react-toastify';
-import { approveCustomerReturn, exportCustomerReturnsReport, getCustomerReturns, rejectCustomerReturn } from '../../services/api';
+import { approveCustomerReturn, deleteCustomerReturn, exportCustomerReturnsReport, getCustomerReturns, rejectCustomerReturn } from '../../services/api';
+import DeleteConfirmationModal from '../../components/DeleteConfirmationModal';
 
 const statusColors = {
   requested: 'bg-amber-100 text-amber-700',
@@ -18,6 +19,17 @@ const AdminReturns = () => {
   const [filter, setFilter] = useState('all');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+
+  // Custom Modal States
+  const [activeReturn, setActiveReturn] = useState(null);
+  const [modalType, setModalType] = useState(''); // 'approve' or 'reject'
+  const [resolution, setResolution] = useState('exchange');
+  const [rejectReason, setRejectReason] = useState('Rejected by admin');
+  const [submitting, setSubmitting] = useState(false);
+
+  // Delete States
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [returnToDelete, setReturnToDelete] = useState(null);
 
   const fetchReturns = async () => {
     try {
@@ -38,27 +50,72 @@ const AdminReturns = () => {
     [returns, filter]
   );
 
-  const handleApprove = async (ret) => {
-    const resolution = window.prompt('Resolution (store_credit / exchange / upgrade)', 'exchange');
-    if (!resolution) return;
+  const openApproveModal = (ret) => {
+    setActiveReturn(ret);
+    setModalType('approve');
+    setResolution('exchange');
+  };
+
+  const openRejectModal = (ret) => {
+    setActiveReturn(ret);
+    setModalType('reject');
+    setRejectReason('Rejected by admin');
+  };
+
+  const submitApprove = async () => {
+    if (!activeReturn) return;
+    setSubmitting(true);
     try {
-      await approveCustomerReturn(ret._id, { resolution, markResolved: true });
+      await approveCustomerReturn(activeReturn._id, { resolution, markResolved: true });
       toast.success('Return approved by admin');
+      setActiveReturn(null);
+      setModalType('');
       fetchReturns();
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to approve return');
+    } finally {
+      setSubmitting(false);
     }
   };
 
-  const handleReject = async (ret) => {
-    const reason = window.prompt('Rejection reason', 'Rejected by admin');
-    if (!reason) return;
+  const submitReject = async () => {
+    if (!activeReturn) return;
+    if (!rejectReason.trim()) {
+      toast.error('Rejection reason is required');
+      return;
+    }
+    setSubmitting(true);
     try {
-      await rejectCustomerReturn(ret._id, { reason });
+      await rejectCustomerReturn(activeReturn._id, { reason: rejectReason.trim() });
       toast.success('Return rejected by admin');
+      setActiveReturn(null);
+      setModalType('');
       fetchReturns();
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to reject return');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const openDeleteModal = (ret) => {
+    setReturnToDelete(ret);
+    setShowDeleteConfirm(true);
+  };
+
+  const submitDelete = async () => {
+    if (!returnToDelete) return;
+    setSubmitting(true);
+    try {
+      await deleteCustomerReturn(returnToDelete._id);
+      toast.success('Return request deleted');
+      setReturnToDelete(null);
+      setShowDeleteConfirm(false);
+      fetchReturns();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to delete return request');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -144,26 +201,33 @@ const AdminReturns = () => {
                         </span>
                       </td>
                       <td className="px-6 py-3.5">
-                        {['requested', 'approved', 'on_hold'].includes(r.status) ? (
-                          <div className="flex items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={() => handleApprove(r)}
-                              className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-                            >
-                              Approve
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleReject(r)}
-                              className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-red-50 text-red-700 hover:bg-red-100"
-                            >
-                              Reject
-                            </button>
-                          </div>
-                        ) : (
-                          <span className="text-xs text-muted-text">No action</span>
-                        )}
+                        <div className="flex items-center gap-2">
+                          {['requested', 'approved', 'on_hold'].includes(r.status) && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => openApproveModal(r)}
+                                className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                              >
+                                Approve
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => openRejectModal(r)}
+                                className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-red-50 text-red-700 hover:bg-red-100"
+                              >
+                                Reject
+                              </button>
+                            </>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => openDeleteModal(r)}
+                            className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-rose-50 text-rose-700 hover:bg-rose-100"
+                          >
+                            Delete
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -178,6 +242,118 @@ const AdminReturns = () => {
           </div>
         )}
       </div>
+
+      {/* Approve Resolution Modal */}
+      {modalType === 'approve' && activeReturn && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl border border-slate-100 p-6 space-y-5">
+            <div className="text-center space-y-2">
+              <div className="w-12 h-12 bg-emerald-50 text-emerald-500 rounded-full flex items-center justify-center mx-auto mb-2 text-xl">
+                ✓
+              </div>
+              <h3 className="font-extrabold text-slate-900 text-lg">Approve Return Request</h3>
+              <p className="text-sm text-slate-500">
+                Resolution for <span className="font-semibold text-slate-800">{activeReturn.holdBillNo}</span> ({activeReturn.customerId?.name || 'Customer'})
+              </p>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                  Resolution Method
+                </label>
+                <select
+                  value={resolution}
+                  onChange={(e) => setResolution(e.target.value)}
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 font-medium text-slate-800 transition-all"
+                >
+                  <option value="exchange">Exchange Product (Default)</option>
+                  <option value="store_credit">Store Credit</option>
+                  <option value="upgrade">Upgrade Product</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="flex gap-3 justify-center pt-2">
+              <button
+                type="button"
+                disabled={submitting}
+                onClick={() => { setActiveReturn(null); setModalType(''); }}
+                className="flex-1 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold hover:bg-slate-50 text-slate-600 transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={submitting}
+                onClick={submitApprove}
+                className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold shadow-md transition-colors disabled:opacity-50"
+              >
+                {submitting ? 'Approving...' : 'Approve'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reject Reason Modal */}
+      {modalType === 'reject' && activeReturn && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl border border-slate-100 p-6 space-y-5">
+            <div className="text-center space-y-2">
+              <div className="w-12 h-12 bg-rose-50 text-rose-500 rounded-full flex items-center justify-center mx-auto mb-2 text-xl">
+                ✕
+              </div>
+              <h3 className="font-extrabold text-slate-900 text-lg">Reject Return Request</h3>
+              <p className="text-sm text-slate-500">
+                Reason for rejecting <span className="font-semibold text-slate-800">{activeReturn.holdBillNo}</span>
+              </p>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                  Rejection Reason
+                </label>
+                <textarea
+                  required
+                  rows={3}
+                  value={rejectReason}
+                  onChange={(e) => setRejectReason(e.target.value)}
+                  placeholder="Provide a clear reason..."
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 font-medium text-slate-800 transition-all resize-none"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-3 justify-center pt-2">
+              <button
+                type="button"
+                disabled={submitting}
+                onClick={() => { setActiveReturn(null); setModalType(''); }}
+                className="flex-1 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold hover:bg-slate-50 text-slate-600 transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={submitting}
+                onClick={submitReject}
+                className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-sm font-bold shadow-md transition-colors disabled:opacity-50"
+              >
+                {submitting ? 'Rejecting...' : 'Reject'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <DeleteConfirmationModal
+        isOpen={showDeleteConfirm}
+        onClose={() => { setShowDeleteConfirm(false); setReturnToDelete(null); }}
+        onConfirm={submitDelete}
+        itemName={returnToDelete?.holdBillNo}
+      />
     </DashboardLayout>
   );
 };

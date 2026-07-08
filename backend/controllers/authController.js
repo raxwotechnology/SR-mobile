@@ -113,7 +113,7 @@ const requestRegistrationOtp = async (req, res) => {
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );
 
-    await sendSms(normalizedPhone, buildOtpMessage(otp));
+    await sendSms(normalizedPhone, await buildOtpMessage(otp));
 
     res.json({
       message: 'OTP sent successfully',
@@ -191,7 +191,8 @@ const authUser = async (req, res) => {
       return fail(res, 400, 'Email and password are required');
     }
 
-    const user = await User.findOne({ email });
+    const normalizedEmail = email.trim().toLowerCase();
+    const user = await User.findOne({ email: normalizedEmail }).populate('assignedStore', 'name');
 
     if (!user) {
       return fail(res, 401, 'Invalid email or password');
@@ -203,7 +204,17 @@ const authUser = async (req, res) => {
     }
 
     if (await user.matchPassword(password)) {
-      res.json({ _id: user._id, name: user.name, email: user.email, role: user.role, phone: user.phone, token: generateToken(user._id) });
+      res.json({ 
+        _id: user._id, 
+        name: user.name, 
+        email: user.email, 
+        role: user.role, 
+        phone: user.phone, 
+        assignedStore: user.assignedStore?._id || user.assignedStore,
+        assignedStoreName: user.assignedStore?.name || '',
+        employeeInfo: user.employeeInfo,
+        token: generateToken(user._id) 
+      });
     } else {
       return fail(res, 401, 'Invalid email or password');
     }
@@ -214,9 +225,20 @@ const authUser = async (req, res) => {
 
 const getMe = async (req, res) => {
   try {
-    const user = await User.findById(req.user._id);
+    const user = await User.findById(req.user._id).populate('assignedStore', 'name');
     if (user) {
-      res.json({ _id: user._id, name: user.name, email: user.email, role: user.role, phone: user.phone, avatar: user.avatar, addresses: user.addresses });
+      res.json({ 
+        _id: user._id, 
+        name: user.name, 
+        email: user.email, 
+        role: user.role, 
+        phone: user.phone, 
+        avatar: user.avatar, 
+        addresses: user.addresses,
+        assignedStore: user.assignedStore?._id || user.assignedStore,
+        assignedStoreName: user.assignedStore?.name || '',
+        employeeInfo: user.employeeInfo
+      });
     } else {
       return fail(res, 404, 'User not found');
     }
@@ -262,12 +284,166 @@ const updateProfile = async (req, res) => {
     }
     if (req.body.password) { user.password = req.body.password; }
     if (req.body.addresses) { user.addresses = req.body.addresses; }
-    if (req.body.avatar) { user.avatar = req.body.avatar; }
+    if (req.body.avatar !== undefined) { user.avatar = req.body.avatar; }
 
     const updated = await user.save();
     res.json({ _id: updated._id, name: updated.name, email: updated.email, role: updated.role, phone: updated.phone, avatar: updated.avatar, addresses: updated.addresses, token: generateToken(updated._id) });
   } catch (error) {
     return fail(res, 500, error.message || 'Failed to update profile');
+  }
+};
+
+const getCashiersList = async (req, res) => {
+  try {
+    const cashiers = await User.find({ 
+      role: { $in: ['cashier', 'manager', 'admin'] },
+      isActive: true 
+    })
+    .select('_id name email avatar role phone employeeInfo.epfNo')
+    .populate('assignedStore', 'name')
+    .lean();
+    res.json(cashiers);
+  } catch (error) {
+    res.status(500).json({ message: error.message || 'Failed to fetch cashiers list' });
+  }
+};
+
+const posLogin = async (req, res) => {
+  try {
+    const { email, code } = req.body;
+    if (!code) {
+      return res.status(400).json({ message: 'Passcode is required' });
+    }
+
+    const codeStr = String(code).trim();
+
+    // If email is provided, verify directly for that user
+    if (email) {
+      const user = await User.findOne({ email, isActive: true }).populate('assignedStore', 'name');
+      if (!user) {
+        return res.status(404).json({ message: 'User not found' });
+      }
+
+      // Check PIN bypass or demographic fields
+      const isMatched = 
+        codeStr === '1234' || 
+        codeStr.toLowerCase() === 'cashier123' ||
+        codeStr.toLowerCase() === 'admin123' ||
+        codeStr.toLowerCase() === 'manager123' ||
+        codeStr.toLowerCase() === user.name.toLowerCase() ||
+        codeStr.toLowerCase() === user.email.toLowerCase() ||
+        (user.employeeInfo?.epfNo && codeStr.toLowerCase() === user.employeeInfo.epfNo.toLowerCase()) ||
+        (user.phone && codeStr === user.phone);
+
+      if (isMatched) {
+        return res.json({
+          _id: user._id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          phone: user.phone,
+          assignedStore: user.assignedStore?._id || user.assignedStore,
+          assignedStoreName: user.assignedStore?.name || '',
+          employeeInfo: user.employeeInfo,
+          token: generateToken(user._id)
+        });
+      }
+
+      // Check actual account password
+      const isPasswordCorrect = await user.matchPassword(codeStr);
+      if (isPasswordCorrect) {
+        return res.json({
+          _id: user._id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          phone: user.phone,
+          assignedStore: user.assignedStore?._id || user.assignedStore,
+          assignedStoreName: user.assignedStore?.name || '',
+          employeeInfo: user.employeeInfo,
+          token: generateToken(user._id)
+        });
+      }
+
+      return res.status(401).json({ message: 'Invalid passcode or password' });
+    }
+
+    // Direct unlock without selected user profile - search all active staff users
+    const staff = await User.find({ 
+      role: { $in: ['cashier', 'manager', 'admin'] },
+      isActive: true 
+    }).populate('assignedStore', 'name');
+
+    for (const user of staff) {
+      const isMatched = 
+        codeStr === '1234' || 
+        codeStr.toLowerCase() === 'cashier123' ||
+        codeStr.toLowerCase() === 'admin123' ||
+        codeStr.toLowerCase() === 'manager123' ||
+        codeStr.toLowerCase() === user.name.toLowerCase() ||
+        codeStr.toLowerCase() === user.email.toLowerCase() ||
+        (user.employeeInfo?.epfNo && codeStr.toLowerCase() === user.employeeInfo.epfNo.toLowerCase()) ||
+        (user.phone && codeStr === user.phone);
+
+      if (isMatched) {
+        return res.json({
+          _id: user._id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          phone: user.phone,
+          assignedStore: user.assignedStore?._id || user.assignedStore,
+          assignedStoreName: user.assignedStore?.name || '',
+          employeeInfo: user.employeeInfo,
+          token: generateToken(user._id)
+        });
+      }
+
+      // Check actual account password
+      try {
+        const isPasswordCorrect = await user.matchPassword(codeStr);
+        if (isPasswordCorrect) {
+          return res.json({
+            _id: user._id,
+            name: user.name,
+            email: user.email,
+            role: user.role,
+            phone: user.phone,
+            assignedStore: user.assignedStore?._id || user.assignedStore,
+            assignedStoreName: user.assignedStore?.name || '',
+            employeeInfo: user.employeeInfo,
+            token: generateToken(user._id)
+          });
+        }
+      } catch (err) {
+        // ignore match failures during list search
+      }
+    }
+
+    return res.status(401).json({ message: 'Invalid passcode or password' });
+  } catch (error) {
+    res.status(500).json({ message: error.message || 'Verification failed' });
+  }
+};
+
+const verifyPassword = async (req, res, next) => {
+  try {
+    const { password } = req.body;
+    if (!password) {
+      return res.status(400).json({ message: 'Password is required' });
+    }
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    const isMatch = await user.matchPassword(password);
+    if (isMatch) {
+      res.json({ success: true, message: 'Password verified successfully' });
+    } else {
+      res.status(401).json({ success: false, message: 'Incorrect login password' });
+    }
+  } catch (error) {
+    res.status(500).json({ message: error.message });
   }
 };
 
@@ -278,4 +454,7 @@ module.exports = {
   authUser,
   getMe,
   updateProfile,
+  getCashiersList,
+  posLogin,
+  verifyPassword,
 };

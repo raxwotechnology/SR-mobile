@@ -6,10 +6,12 @@ const usePosStore = create((set, get) => ({
   discountType: 'percentage', // 'percentage' or 'fixed'
   paymentMethod: 'cash',
   tenderedAmount: '',
-  taxRate: 0.05, // 5% default, can be updated from settings
+  taxRate: 0, // 0% default, can be updated from settings
   coupon: null, // { code, value, type, description }
   customerName: '',
   customerPhone: '',
+  customerNic: '',
+  customerAddress: '',
   sendReceiptEmail: false,
   receiptEmail: '',
   sendSmsReceipt: false,
@@ -50,6 +52,7 @@ const usePosStore = create((set, get) => ({
             barcode: product.barcode || '',
             warranty: product.warranty || '',
             quantity: 1,
+            imei: [],
           },
         ],
       });
@@ -70,6 +73,14 @@ const usePosStore = create((set, get) => ({
         item.productId === productId
           ? { ...item, quantity: Math.min(quantity, item.stock) }
           : item
+      ),
+    });
+  },
+
+  setCartItemImeis: (productId, imeis) => {
+    set({
+      cart: get().cart.map((item) =>
+        item.productId === productId ? { ...item, imei: imeis } : item
       ),
     });
   },
@@ -98,13 +109,13 @@ const usePosStore = create((set, get) => ({
     set({ taxRate: rate });
   },
 
-  setCustomerInfo: (name, phone) => {
+  setCustomerInfo: (name, phone, nic = '', address = '') => {
     const { hirePurchaseData } = get();
-    const updates = { customerName: name, customerPhone: phone };
+    const updates = { customerName: name, customerPhone: phone, customerNic: nic, customerAddress: address };
     if (hirePurchaseData) {
       updates.hirePurchaseData = {
         ...hirePurchaseData,
-        customer: { ...hirePurchaseData.customer, name, phone }
+        customer: { ...hirePurchaseData.customer, name, phone, nic, address }
       };
     }
     set(updates);
@@ -151,6 +162,8 @@ const usePosStore = create((set, get) => ({
       coupon: null,
       customerName: '',
       customerPhone: '',
+      customerNic: '',
+      customerAddress: '',
       sendReceiptEmail: false,
       receiptEmail: '',
       sendSmsReceipt: false,

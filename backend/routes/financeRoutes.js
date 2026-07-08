@@ -8,6 +8,11 @@ const {
   deleteTransaction,
   getCheques,
   updateChequeStatus,
+  getPettyCashLog,
+  createPettyCashEntry,
+  getTaxPayments,
+  createTaxPayment,
+  getProfitReport,
 } = require('../controllers/financeController');
 
 const { protect, requirePermission } = require('../middleware/authMiddleware');
@@ -17,6 +22,7 @@ router.use(requirePermission('finance'));
 
 // Financial Dashboard (Aggregated stats & charts)
 router.get('/dashboard', getFinancialDashboard);
+router.get('/profit-report', getProfitReport);
 
 // Transaction Ledger (Incomes & Expenses)
 router.route('/transactions')
@@ -31,5 +37,14 @@ router.route('/transactions/:id')
 router.get('/cheques', getCheques);
 router.put('/cheques/:id/status', updateChequeStatus);
 
+// Petty Cash Log
+router.route('/petty-cash')
+  .get(getPettyCashLog)
+  .post(createPettyCashEntry);
+
+// Tax Payments Log
+router.route('/tax-payments')
+  .get(getTaxPayments)
+  .post(createTaxPayment);
 
 module.exports = router;

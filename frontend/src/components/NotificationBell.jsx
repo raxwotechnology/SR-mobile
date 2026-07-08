@@ -8,6 +8,7 @@ const NotificationBell = () => {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
   const { notifications, unreadCount, fetchNotifications, markAsRead, markAllRead } = useNotificationStore();
+  const [now] = useState(() => Date.now());
 
   useEffect(() => {
     fetchNotifications();
@@ -45,7 +46,7 @@ const NotificationBell = () => {
   };
 
   const timeAgo = (date) => {
-    const seconds = Math.floor((Date.now() - new Date(date)) / 1000);
+    const seconds = Math.floor((now - new Date(date)) / 1000);
     if (seconds < 60) return 'just now';
     const minutes = Math.floor(seconds / 60);
     if (minutes < 60) return `${minutes}m ago`;

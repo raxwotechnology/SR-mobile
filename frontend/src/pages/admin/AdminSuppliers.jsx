@@ -1,13 +1,15 @@
 import React, { useEffect, useState } from 'react';
-import { Plus, Edit2, Trash2, Search, X, Users, Phone, Mail, MapPin, Building, DollarSign, Wallet, ArrowRight } from 'lucide-react';
+import { Plus, Edit2, Trash2, Search, X, Users, Phone, Mail, MapPin, Building, DollarSign, Wallet, ArrowRight, Landmark } from 'lucide-react';
 import DashboardLayout from '../../components/DashboardLayout';
 import { getSuppliers, createSupplier, updateSupplier, deleteSupplier, getStores } from '../../services/api';
 import { toast } from 'react-toastify';
 import { adminNavGroups as navItems } from './adminNavItems';
+import DeleteConfirmationModal from '../../components/DeleteConfirmationModal';
 import useAdminStoreStore from '../../store/adminStoreStore';
 
 const emptyForm = {
-  name: '', company: '', contactPerson: '', email: '', phone: '', address: '', taxId: '', notes: '', status: 'active', storeId: ''
+  name: '', company: '', contactPerson: '', email: '', phone: '', address: '', taxId: '', notes: '', status: 'active', storeId: '',
+  bankName: '', bankBranch: '', bankAccountNumber: '', bankAccountName: '', allStores: false
 };
 
 const AdminSuppliers = () => {
@@ -63,6 +65,11 @@ const AdminSuppliers = () => {
       notes: supplier.notes || '',
       status: supplier.status || 'active',
       storeId: supplier.storeId?._id || supplier.storeId || '',
+      bankName: supplier.bankName || '',
+      bankBranch: supplier.bankBranch || '',
+      bankAccountNumber: supplier.bankAccountNumber || '',
+      bankAccountName: supplier.bankAccountName || '',
+      allStores: supplier.allStores || false,
     });
     setShowModal(true);
   };
@@ -71,7 +78,7 @@ const AdminSuppliers = () => {
     e.preventDefault();
     setSaving(true);
     try {
-      if (!form.storeId) {
+      if (!form.allStores && !form.storeId) {
         toast.error('Store assignment is required');
         setSaving(false);
         return;
@@ -93,10 +100,18 @@ const AdminSuppliers = () => {
     }
   };
 
-  const handleDelete = async (id) => {
-    if (!window.confirm('Are you sure? This will remove the supplier record.')) return;
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState(null);
+
+  const handleDeleteClick = (supplier) => {
+    setItemToDelete({ id: supplier._id, name: supplier.name });
+    setDeleteModalOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!itemToDelete) return;
     try {
-      await deleteSupplier(id);
+      await deleteSupplier(itemToDelete.id);
       toast.success('Supplier removed');
       fetchData();
     } catch (err) {
@@ -174,55 +189,85 @@ const AdminSuppliers = () => {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {filtered.map((supplier) => (
-            <div key={supplier._id} className="bg-white rounded-3xl border border-gray-100 p-6 shadow-sm hover:shadow-md transition-all group">
-              <div className="flex justify-between items-start mb-4">
-                <div className="flex items-center gap-4">
-                  <div className="w-14 h-14 rounded-2xl bg-indigo-50 flex items-center justify-center text-primary-blue font-bold text-xl group-hover:scale-110 transition-transform">
-                    {supplier.name.charAt(0)}
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-dark-navy text-lg">{supplier.name}</h3>
-                    <div className="flex items-center gap-2 text-xs text-muted-text">
-                      <Building size={12} /> {supplier.company || 'Private Supplier'}
+          {filtered.map((supplier) => {
+            const storeObj = stores.find(s => s._id === (supplier.storeId?._id || supplier.storeId));
+            const storeName = supplier.allStores ? 'All Stores' : (storeObj?.name || 'Local Store');
+            
+            return (
+              <div key={supplier._id} className="bg-white rounded-3xl border border-gray-100 p-6 shadow-sm hover:shadow-md transition-all group flex flex-col justify-between">
+                <div>
+                  <div className="flex justify-between items-start mb-4">
+                    <div className="flex items-center gap-4">
+                      <div className="w-14 h-14 rounded-2xl bg-indigo-50 flex items-center justify-center text-primary-blue font-bold text-xl group-hover:scale-110 transition-transform">
+                        {supplier.name.charAt(0)}
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h3 className="font-bold text-dark-navy text-lg leading-tight">{supplier.name}</h3>
+                          <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${supplier.allStores ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>
+                            {storeName}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 text-xs text-muted-text mt-1">
+                          <Building size={12} /> {supplier.company || 'Private Supplier'}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button onClick={() => openEdit(supplier)} className="p-2 rounded-xl bg-gray-50 text-gray-400 hover:text-primary-blue hover:bg-indigo-50 transition-all"><Edit2 size={16} /></button>
+                      <button onClick={() => handleDeleteClick(supplier)} className="p-2 rounded-xl bg-gray-50 text-gray-400 hover:text-red-500 hover:bg-red-50 transition-all"><Trash2 size={16} /></button>
                     </div>
                   </div>
-                </div>
-                <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button onClick={() => openEdit(supplier)} className="p-2 rounded-xl bg-gray-50 text-gray-400 hover:text-primary-blue hover:bg-indigo-50 transition-all"><Edit2 size={16} /></button>
-                  <button onClick={() => handleDelete(supplier._id)} className="p-2 rounded-xl bg-gray-50 text-gray-400 hover:text-red-500 hover:bg-red-50 transition-all"><Trash2 size={16} /></button>
-                </div>
-              </div>
 
-              <div className="grid grid-cols-2 gap-4 mt-6">
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2 text-xs text-muted-text">
-                    <Phone size={14} className="text-gray-300" /> {supplier.phone || 'No phone'}
+                  <div className="grid grid-cols-2 gap-4 mt-6">
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-2 text-xs text-muted-text">
+                        <Phone size={14} className="text-gray-300 flex-shrink-0" /> {supplier.phone || 'No phone'}
+                      </div>
+                      <div className="flex items-center gap-2 text-xs text-muted-text">
+                        <Mail size={14} className="text-gray-300 flex-shrink-0" /> {supplier.email || 'No email'}
+                      </div>
+                    </div>
+                    <div className="space-y-3">
+                      <div className="flex items-start gap-2 text-xs text-muted-text">
+                        <MapPin size={14} className="text-gray-300 mt-0.5 flex-shrink-0" /> {supplier.address || 'No address'}
+                      </div>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2 text-xs text-muted-text">
-                    <Mail size={14} className="text-gray-300" /> {supplier.email || 'No email'}
-                  </div>
-                </div>
-                <div className="space-y-3">
-                  <div className="flex items-start gap-2 text-xs text-muted-text">
-                    <MapPin size={14} className="text-gray-300 mt-0.5" /> {supplier.address || 'No address'}
-                  </div>
-                </div>
-              </div>
 
-              <div className="mt-6 pt-6 border-t border-gray-50 flex items-center justify-between">
-                <div className="text-xs">
-                  <p className="text-gray-400 mb-1">Outstanding Balance</p>
-                  <p className={`font-bold text-lg ${supplier.outstandingBalance > 0 ? 'text-red-500' : 'text-emerald-500'}`}>
-                    Rs. {Number(supplier.outstandingBalance || 0).toLocaleString()}
-                  </p>
+                  {/* Bank Account Details */}
+                  {supplier.bankAccountNumber ? (
+                    <div className="mt-4 p-3 bg-slate-50 rounded-2xl flex items-start gap-2.5 text-xs text-muted-text border border-gray-100">
+                      <Landmark size={14} className="text-gray-400 mt-0.5 flex-shrink-0" />
+                      <div className="min-w-0">
+                        <p className="font-semibold text-dark-navy">{supplier.bankName || 'Bank Account'}</p>
+                        <p className="font-mono mt-0.5 truncate">{supplier.bankAccountNumber} ({supplier.bankBranch || 'No Branch'})</p>
+                        {supplier.bankAccountName && (
+                          <p className="text-[10px] text-gray-400 truncate mt-0.5">A/C: {supplier.bankAccountName}</p>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="mt-4 p-3 bg-gray-50/50 rounded-2xl text-center text-xs text-gray-400 border border-gray-100 border-dashed">
+                      No Bank Account Linked
+                    </div>
+                  )}
                 </div>
-                <span className={`text-[10px] font-bold px-3 py-1 rounded-full ${supplier.status === 'active' ? 'bg-emerald-50 text-emerald-600' : 'bg-gray-50 text-gray-400'}`}>
-                  {supplier.status.toUpperCase()}
-                </span>
+
+                <div className="mt-6 pt-6 border-t border-gray-50 flex items-center justify-between">
+                  <div className="text-xs">
+                    <p className="text-gray-400 mb-1">Outstanding Balance</p>
+                    <p className={`font-bold text-lg ${supplier.outstandingBalance > 0 ? 'text-red-500' : 'text-emerald-500'}`}>
+                      Rs. {Number(supplier.outstandingBalance || 0).toLocaleString()}
+                    </p>
+                  </div>
+                  <span className={`text-[10px] font-bold px-3 py-1 rounded-full ${supplier.status === 'active' ? 'bg-emerald-50 text-emerald-600' : 'bg-gray-50 text-gray-400'}`}>
+                    {supplier.status.toUpperCase()}
+                  </span>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         {showModal && (
@@ -255,16 +300,37 @@ const AdminSuppliers = () => {
                     <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5">Address</label>
                     <textarea rows={2} value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-4 text-sm resize-none" placeholder="Enter physical address..." />
                   </div>
+                  
+                  <div className="md:col-span-2 flex items-center gap-2 py-1">
+                    <input 
+                      type="checkbox" 
+                      id="allStores" 
+                      checked={form.allStores} 
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setForm({ 
+                          ...form, 
+                          allStores: checked, 
+                          storeId: checked ? '' : (selectedStoreId !== 'all' ? selectedStoreId : '') 
+                        });
+                      }}
+                      className="w-4 h-4 text-primary-blue rounded border-gray-300 focus:ring-primary-blue"
+                    />
+                    <label htmlFor="allStores" className="text-xs font-bold text-dark-navy uppercase cursor-pointer select-none">
+                      Global Supplier (Supplies to All Stores)
+                    </label>
+                  </div>
+
                   <div>
-                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5">Store Assignment *</label>
+                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5">Store Assignment {!form.allStores && '*'}</label>
                     <select 
-                      required 
-                      disabled={selectedStoreId !== 'all'}
-                      value={form.storeId} 
+                      required={!form.allStores}
+                      disabled={form.allStores || selectedStoreId !== 'all'}
+                      value={form.allStores ? '' : form.storeId} 
                       onChange={(e) => setForm({ ...form, storeId: e.target.value })} 
                       className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-4 text-sm disabled:opacity-50"
                     >
-                      <option value="">Select Store</option>
+                      <option value="">{form.allStores ? 'All Stores Scoped' : 'Select Store'}</option>
                       {stores.map((s) => <option key={s._id} value={s._id}>{s.name}</option>)}
                     </select>
                   </div>
@@ -275,6 +341,50 @@ const AdminSuppliers = () => {
                       <option value="active">Active</option>
                       <option value="inactive">Inactive</option>
                     </select>
+                  </div>
+                  
+                  <div className="md:col-span-2 border-t border-gray-100 pt-4 mt-2">
+                    <h4 className="text-xs font-bold text-dark-navy uppercase tracking-wider mb-4 flex items-center gap-1.5">
+                      <Landmark size={14} className="text-primary-blue" /> Bank Account Details
+                    </h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5">Bank Name</label>
+                        <input 
+                          value={form.bankName} 
+                          onChange={(e) => setForm({ ...form, bankName: e.target.value })} 
+                          className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-4 text-sm" 
+                          placeholder="e.g. Commercial Bank" 
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5">Branch Name</label>
+                        <input 
+                          value={form.bankBranch} 
+                          onChange={(e) => setForm({ ...form, bankBranch: e.target.value })} 
+                          className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-4 text-sm" 
+                          placeholder="e.g. Colombo 03" 
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5">Account Number</label>
+                        <input 
+                          value={form.bankAccountNumber} 
+                          onChange={(e) => setForm({ ...form, bankAccountNumber: e.target.value })} 
+                          className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-4 text-sm" 
+                          placeholder="e.g. 1009123456" 
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5">Account Holder Name</label>
+                        <input 
+                          value={form.bankAccountName} 
+                          onChange={(e) => setForm({ ...form, bankAccountName: e.target.value })} 
+                          className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-4 text-sm" 
+                          placeholder="e.g. Samsung Lanka Pvt Ltd" 
+                        />
+                      </div>
+                    </div>
                   </div>
                 </div>
 
@@ -291,6 +401,13 @@ const AdminSuppliers = () => {
           </div>
         )}
       </div>
+
+      <DeleteConfirmationModal
+        isOpen={deleteModalOpen}
+        onClose={() => { setDeleteModalOpen(false); setItemToDelete(null); }}
+        onConfirm={handleDeleteConfirm}
+        itemName={itemToDelete?.name}
+      />
     </DashboardLayout>
   );
 };

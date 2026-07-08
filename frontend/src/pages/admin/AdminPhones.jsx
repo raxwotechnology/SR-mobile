@@ -10,9 +10,10 @@ import SuppliersPanel from '../inventory/SuppliersPanel';
 import StockReceivingPanel from '../inventory/StockReceivingPanel';
 import SupplierReturnsPanel from '../inventory/SupplierReturnsPanel';
 import { getImageUrl, handleImageError, isDirectImageUrl, convertExternalUrl } from '../../utils/imageHelper';
+import DeleteConfirmationModal from '../../components/DeleteConfirmationModal';
 
 const emptyForm = {
-  name: '', categoryId: '', description: '', price: '', mrp: '', discount: '', unit: 'pcs',
+  name: '', categoryId: '', description: '', price: '', minPrice: '', mrp: '', discount: '', unit: 'pcs',
   stock: '', purchasePrice: '', images: '', isFeatured: false, isOnSale: false, status: 'active', storeId: '',
   brand: '', modelNumber: '', ram: '', storage: '', color: '', condition: 'new', imei: '', warranty: '', supplierId: '', productLink: ''
 };
@@ -24,7 +25,7 @@ const AdminPhones = () => {
   const [suppliers, setSuppliers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const { selectedStoreId } = useAdminStoreStore();
+  const { selectedStoreId, setSelectedStoreId } = useAdminStoreStore();
   const [search, setSearch] = useState('');
   const [brandFilter, setBrandFilter] = useState('all');
   const [showModal, setShowModal] = useState(false);
@@ -37,6 +38,10 @@ const AdminPhones = () => {
   const [uploadedImages, setUploadedImages] = useState([]);
   const [autoSku, setAutoSku] = useState('');
   const imageInputRef = useRef();
+
+  // Password confirmation states
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState(null);
 
   const fetchData = async () => {
     try {
@@ -100,6 +105,7 @@ const AdminPhones = () => {
       categoryId: product.categoryId?._id || '',
       description: product.description || '',
       price: product.price || '',
+      minPrice: product.minPrice || '',
       mrp: product.mrp || '',
       discount: product.discount || '',
       unit: product.unit || 'pcs',
@@ -153,42 +159,52 @@ const AdminPhones = () => {
         finalImages.unshift(form.productLink);
       }
 
+      // Validate store
+      const storeExists = stores.find(s => s._id === form.storeId);
+      if (!storeExists) {
+        toast.error('Please select a valid store from the suggestions');
+        setSaving(false);
+        return;
+      }
+
+      // Validate supplier if configured
+      let supplierId = form.supplierId;
+      if (supplierId && supplierId !== 'none') {
+        const supplierExists = suppliers.find(s => s._id === supplierId);
+        if (!supplierExists) {
+          toast.error('Please select a valid supplier from the suggestions, or select "None"');
+          setSaving(false);
+          return;
+        }
+      } else {
+        supplierId = null;
+      }
+
+      // Enforce minimum price check
+      if (form.minPrice && Number(form.price) < Number(form.minPrice)) {
+        toast.error('Selling price cannot be lower than the configured minimum price');
+        setSaving(false);
+        return;
+      }
+
       const payload = {
         ...form,
         price: Number(form.price),
+        minPrice: Number(form.minPrice) || 0,
         mrp: Number(form.mrp) || Number(form.price),
         discount: Number(form.discount) || 0,
         stock: Number(form.stock),
         purchasePrice: Number(form.purchasePrice) || 0,
         images: finalImages,
+        supplierId,
         imei: form.imei ? form.imei.split(',').map((s) => s.trim()).filter(Boolean) : [],
       };
       
-      if (!payload.storeId) {
-        toast.error('Store is required');
-        setSaving(false);
-        return;
-      }
-
-
-      console.log('📦 Payload being sent:', {
-        productLink: payload.productLink,
-        images: payload.images,
-      });
-
       if (editingId) {
-        const res = await updateProduct(editingId, payload);
-        console.log('✅ Update response:', {
-          productLink: res.data?.productLink,
-          images: res.data?.images,
-        });
+        await updateProduct(editingId, payload);
         toast.success('Mobile phone updated');
       } else {
-        const res = await createProduct(payload);
-        console.log('✅ Create response:', {
-          productLink: res.data?.productLink,
-          images: res.data?.images,
-        });
+        await createProduct(payload);
         toast.success('Mobile phone added');
       }
       setShowModal(false);
@@ -200,10 +216,15 @@ const AdminPhones = () => {
     }
   };
 
-  const handleDelete = async (id) => {
-    if (!window.confirm('Delete this mobile phone?')) return;
+  const handleDeleteClick = (product) => {
+    setItemToDelete({ id: product._id, name: product.name });
+    setDeleteModalOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!itemToDelete) return;
     try {
-      await deleteProduct(id);
+      await deleteProduct(itemToDelete.id);
       toast.success('Product deleted');
       fetchData();
     } catch (err) {
@@ -270,9 +291,12 @@ const AdminPhones = () => {
           </div>
         </div>
 
-        {/* Suppliers Tab */}
         {activeTab === 'suppliers' && (
-          <SuppliersPanel storeId={selectedStoreId !== 'all' ? selectedStoreId : undefined} />
+          <SuppliersPanel 
+            storeId={selectedStoreId !== 'all' ? selectedStoreId : undefined} 
+            stores={stores}
+            onStoreChange={(id) => setSelectedStoreId(id)}
+          />
         )}
 
         {/* Stock Receiving Tab */}
@@ -391,6 +415,11 @@ const AdminPhones = () => {
                         </td>
                         <td className="px-6 py-3.5">
                           <div className="font-bold text-dark-navy">Rs. {Number(product.price || 0).toLocaleString()}</div>
+                          {Number(product.minPrice || 0) > 0 && (
+                            <div className="text-[10px] font-bold text-red-600 bg-red-50 border border-red-100 px-2 py-0.5 rounded-full mt-1 inline-block">
+                              Min Rs. {Number(product.minPrice || 0).toLocaleString()}
+                            </div>
+                          )}
                           <div className="text-xs text-muted-text">Stock: <span className={`font-bold ${product.stock <= 5 ? 'text-red-500' : 'text-emerald-500'}`}>{product.stock}</span></div>
                         </td>
                         <td className="px-6 py-3.5 text-xs">
@@ -403,7 +432,7 @@ const AdminPhones = () => {
                         <td className="px-6 py-3.5 text-right">
                           <div className="flex items-center justify-end gap-1">
                             <button onClick={() => openEdit(product)} className="p-2 rounded-lg hover:bg-indigo-50 text-primary-blue transition-colors" title="Edit Device"><Edit2 size={16} /></button>
-                            <button onClick={() => handleDelete(product._id)} className="p-2 rounded-lg hover:bg-red-50 text-red-500 transition-colors" title="Delete"><Trash2 size={16} /></button>
+                            <button onClick={() => handleDeleteClick(product)} className="p-2 rounded-lg hover:bg-red-50 text-red-500 transition-colors" title="Delete"><Trash2 size={16} /></button>
                           </div>
                         </td>
                       </tr>
@@ -493,16 +522,25 @@ const AdminPhones = () => {
                     </div>
                     <div>
                       <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5">Category *</label>
-                      <select required value={form.categoryId} onChange={(e) => {
-                        const catId = e.target.value;
-                        setForm({ ...form, categoryId: catId });
-                        if (catId && !editingId) {
-                          getNextSku(catId).then(({ data }) => setAutoSku(data.sku || '')).catch(() => {});
-                        }
-                      }} className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-4 text-sm">
-                        <option value="">Select Category</option>
-                        {categories.map((c) => <option key={c._id} value={c._id}>{c.name}</option>)}
-                      </select>
+                      <input 
+                        list="category-suggestions"
+                        required
+                        placeholder="Type or select category"
+                        value={categories.find(c => c._id === form.categoryId)?.name || form.categoryId || ''}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          const existing = categories.find(c => c.name.toLowerCase() === val.toLowerCase());
+                          const catId = existing ? existing._id : val;
+                          setForm({ ...form, categoryId: catId });
+                          if (catId && !editingId) {
+                            getNextSku(catId).then(({ data }) => setAutoSku(data.sku || '')).catch(() => {});
+                          }
+                        }}
+                        className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-4 text-sm" 
+                      />
+                      <datalist id="category-suggestions">
+                        {categories.map((c) => <option key={c._id} value={c.name} />)}
+                      </datalist>
                     </div>
                     {!editingId && autoSku && (
                       <div>
@@ -518,16 +556,22 @@ const AdminPhones = () => {
                     )}
                     <div>
                       <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5">Store Assignment *</label>
-                      <select 
-                        required 
+                      <input 
+                        list="store-suggestions"
+                        required
                         disabled={selectedStoreId !== 'all'}
-                        value={form.storeId} 
-                        onChange={(e) => setForm({ ...form, storeId: e.target.value })} 
-                        className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-4 text-sm disabled:opacity-50"
-                      >
-                        <option value="">Select Store</option>
-                        {stores.map((s) => <option key={s._id} value={s._id}>{s.name}</option>)}
-                      </select>
+                        placeholder="Type or select Store"
+                        value={stores.find(s => s._id === form.storeId)?.name || form.storeId || ''}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          const existing = stores.find(s => s.name.toLowerCase() === val.toLowerCase());
+                          setForm({ ...form, storeId: existing ? existing._id : val });
+                        }}
+                        className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-4 text-sm disabled:opacity-50" 
+                      />
+                      <datalist id="store-suggestions">
+                        {stores.map((s) => <option key={s._id} value={s.name} />)}
+                      </datalist>
                       {selectedStoreId === 'all' && !form.storeId && (
                         <p className="text-[10px] text-red-500 mt-1">Please select a store to register this device</p>
                       )}
@@ -633,6 +677,10 @@ const AdminPhones = () => {
                       <input type="number" required value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-4 text-sm font-bold text-indigo-700" placeholder="0.00" />
                     </div>
                     <div>
+                      <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5">Minimum Price</label>
+                      <input type="number" min="0" value={form.minPrice} onChange={(e) => setForm({ ...form, minPrice: e.target.value })} className="w-full bg-red-50 border border-red-100 rounded-xl py-3 px-4 text-sm font-bold text-red-700" placeholder="Cannot sell below" />
+                    </div>
+                    <div>
                       <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5">Purchase/Cost Price</label>
                       <input type="number" value={form.purchasePrice} onChange={(e) => setForm({ ...form, purchasePrice: e.target.value })} className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-4 text-sm" placeholder="0.00" />
                     </div>
@@ -641,11 +689,26 @@ const AdminPhones = () => {
                       <input type="number" required value={form.stock} onChange={(e) => setForm({ ...form, stock: e.target.value })} className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-4 text-sm" placeholder="0" />
                     </div>
                     <div>
-                      <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5">Supplier *</label>
-                      <select required value={form.supplierId} onChange={(e) => setForm({ ...form, supplierId: e.target.value })} className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-4 text-sm">
-                        <option value="">Select Supplier</option>
-                        {suppliers.map((s) => <option key={s._id} value={s._id}>{s.name} ({s.company})</option>)}
-                      </select>
+                      <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5">Supplier</label>
+                      <input 
+                        list="supplier-suggestions"
+                        placeholder="Search or select supplier"
+                        value={form.supplierId === 'none' ? 'None' : (suppliers.find(s => s._id === form.supplierId)?.name || form.supplierId || '')}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (val.toLowerCase() === 'none' || val === '') {
+                            setForm({ ...form, supplierId: 'none' });
+                          } else {
+                            const existing = suppliers.find(s => s.name.toLowerCase() === val.toLowerCase());
+                            setForm({ ...form, supplierId: existing ? existing._id : val });
+                          }
+                        }}
+                        className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-4 text-sm" 
+                      />
+                      <datalist id="supplier-suggestions">
+                        <option value="None" />
+                        {suppliers.map((s) => <option key={s._id} value={s.name}>{s.company}</option>)}
+                      </datalist>
                     </div>
                   </div>
                 </div>
@@ -731,6 +794,13 @@ const AdminPhones = () => {
           </div>
         )}
       </div>
+
+      <DeleteConfirmationModal
+        isOpen={deleteModalOpen}
+        onClose={() => { setDeleteModalOpen(false); setItemToDelete(null); }}
+        onConfirm={handleDeleteConfirm}
+        itemName={itemToDelete?.name}
+      />
     </DashboardLayout>
   );
 };

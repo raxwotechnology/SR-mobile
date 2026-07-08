@@ -4,6 +4,7 @@ import { MapPin, Clock, Phone, Mail, ArrowLeft } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { getStoreById, getProducts } from '../services/api';
 import ProductCard from '../components/ProductCard';
+import { getImageUrl } from '../utils/imageHelper';
 
 const StoreDetail = () => {
   const { id } = useParams();
@@ -57,7 +58,7 @@ const StoreDetail = () => {
       {/* Store Banner */}
       <div className="relative h-64 md:h-80 overflow-hidden">
         <img
-          src={store.bannerImage || 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=1200'}
+          src={getImageUrl(store.bannerImage) || 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=1200'}
           alt={store.name}
           className="w-full h-full object-cover"
         />
@@ -65,7 +66,7 @@ const StoreDetail = () => {
         <div className="absolute bottom-0 left-0 right-0">
           <div className="base-container py-6 flex items-end gap-5">
             <div className="w-20 h-20 rounded-2xl border-4 border-white overflow-hidden bg-white shadow-xl flex-shrink-0">
-              <img src={store.logo || 'https://via.placeholder.com/100'} alt="" className="w-full h-full object-cover" />
+              <img src={getImageUrl(store.logo) || 'https://via.placeholder.com/100'} alt="" className="w-full h-full object-cover" />
             </div>
             <div>
               <h1 className="text-2xl md:text-3xl font-bold text-white mt-0 mb-1 drop-shadow-lg">{store.name}</h1>

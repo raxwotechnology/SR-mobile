@@ -420,7 +420,7 @@ const requestPaymentOtp = async (req, res, next) => {
     order.paymentOtpRequired = true;
     await order.save();
 
-    await sendSms(formatSLPhone(user.phone), buildOtpMessage(otp));
+    await sendSms(formatSLPhone(user.phone), await buildOtpMessage(otp));
 
     res.json({
       message: 'Payment OTP sent successfully',
@@ -562,7 +562,10 @@ const payHereNotify = async (req, res, next) => {
       try {
         const customer = await User.findById(order.userId);
         if (customer?.phone && isValidSLPhone(customer.phone)) {
-          await sendSms(formatSLPhone(customer.phone), buildPaymentMessage(order.totalAmount));
+          await sendSms(formatSLPhone(customer.phone), await buildPaymentMessage(order.totalAmount, {
+            invoiceNo: order.invoiceNumber || order._id.toString().slice(-8).toUpperCase(),
+            orderNo: order._id.toString().slice(-8).toUpperCase(),
+          }));
         }
       } catch (smsErr) {
         console.error('[SMS] Payment confirmation failed:', smsErr.message);

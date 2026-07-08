@@ -196,7 +196,15 @@ const createProduct = async (req, res, next) => {
       warranty,
       supplierId,
       productLink,
+      minPrice,
     } = req.body;
+
+    const numericPrice = Number(price || 0);
+    const numericMinPrice = Number(minPrice || 0);
+    if (numericMinPrice > 0 && numericPrice < numericMinPrice) {
+      res.status(400);
+      return next(new Error('Selling price cannot be lower than the configured minimum price'));
+    }
 
 
     let finalCategoryId = categoryId;
@@ -236,7 +244,7 @@ const createProduct = async (req, res, next) => {
 
       subCategory,
       description,
-      price,
+      price: numericPrice,
       mrp,
       discount: discount || Math.round(((mrp - price) / mrp) * 100),
       unit,
@@ -261,6 +269,7 @@ const createProduct = async (req, res, next) => {
 
       avgCost: Number(purchasePrice || 0),
       costPrice: Number(purchasePrice || 0),
+      minPrice: numericMinPrice,
       newStock: stock || 0,
       oldStock: 0,
       stockType: 'new',
@@ -289,7 +298,7 @@ const updateProduct = async (req, res, next) => {
       'mrp', 'discount', 'unit', 'variants', 'stock', 'images',
       'isFeatured', 'isOnSale', 'status', 'allowKokoOnline', 'allowKokoPos',
       'stockType', 'oldStock', 'newStock', 'costPrice', 'storeId',
-      'brand', 'modelNumber', 'ram', 'storage', 'color', 'condition', 'imei', 'warranty', 'supplierId', 'productLink'
+      'brand', 'modelNumber', 'ram', 'storage', 'color', 'condition', 'imei', 'warranty', 'supplierId', 'productLink', 'minPrice'
     ];
 
 
@@ -308,6 +317,13 @@ const updateProduct = async (req, res, next) => {
         });
       }
       req.body.categoryId = category._id;
+    }
+
+    const nextPrice = req.body.price !== undefined ? Number(req.body.price || 0) : Number(product.price || 0);
+    const nextMinPrice = req.body.minPrice !== undefined ? Number(req.body.minPrice || 0) : Number(product.minPrice || 0);
+    if (nextMinPrice > 0 && nextPrice < nextMinPrice) {
+      res.status(400);
+      return next(new Error('Selling price cannot be lower than the configured minimum price'));
     }
 
 

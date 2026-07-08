@@ -82,6 +82,7 @@ const recordHPPayment = async (req, res, next) => {
 
     record.payments.push(payment);
     record.totalPaid += Number(amount);
+    record.balanceAmount = Math.max(0, record.netTotal - record.totalPaid);
     
     // Update installments count (rough estimate or based on amount)
     if (amount >= record.installmentAmount) {
@@ -90,6 +91,24 @@ const recordHPPayment = async (req, res, next) => {
 
     if (record.totalPaid >= record.netTotal) {
       record.status = 'Completed';
+    }
+
+    // Sync associated order payment status & credit balance
+    if (record.orderId) {
+      try {
+        const order = await Order.findById(record.orderId);
+        if (order) {
+          // Down payment was already paid, so subsequent payments reduce the remaining credit balance
+          order.amountPaid = Math.min(order.totalAmount, order.amountPaid + Number(amount));
+          order.creditBalance = Math.max(0, order.totalAmount - order.amountPaid);
+          if (order.creditBalance <= 0) {
+            order.paymentStatus = 'completed';
+          }
+          await order.save();
+        }
+      } catch (err) {
+        console.error('Failed to sync order payment status:', err);
+      }
     }
 
     // Calculate next due date
@@ -175,10 +194,26 @@ const getAllCustomers = async (req, res, next) => {
   } catch (error) { next(error); }
 };
 
+// @desc    Delete HP record
+// @route   DELETE /api/hp/:id
+// @access  Private/Admin
+const deleteHPRecord = async (req, res, next) => {
+  try {
+    const record = await HirePurchase.findById(req.params.id);
+    if (!record) {
+      res.status(404);
+      return next(new Error('HP record not found'));
+    }
+    await record.deleteOne();
+    res.json({ message: 'Hire Purchase record deleted' });
+  } catch (error) { next(error); }
+};
+
 module.exports = {
   getHPRecords,
   getHPById,
   recordHPPayment,
   getCustomerHistory,
-  getAllCustomers
+  getAllCustomers,
+  deleteHPRecord
 };

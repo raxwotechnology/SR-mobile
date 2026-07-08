@@ -5,6 +5,7 @@ const {
   getAccounts,
   createAccount,
   updateAccount,
+  deleteAccount,
   getAccountTransactions
 } = require('../controllers/accountController');
 
@@ -15,7 +16,8 @@ router.route('/')
   .post(authorize('admin'), createAccount);
 
 router.route('/:id')
-  .put(authorize('admin'), updateAccount);
+  .put(authorize('admin'), updateAccount)
+  .delete(authorize('admin'), deleteAccount);
 
 router.get('/:id/transactions', getAccountTransactions);
 

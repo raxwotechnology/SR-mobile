@@ -21,7 +21,6 @@ const createTransporter = () => {
 const sendEmail = async (to, subject, html) => {
   try {
     if (!process.env.EMAIL_FROM || !process.env.EMAIL_APP_PASSWORD) {
-      console.log('[Email] Skipping — no email credentials configured');
       return null;
     }
 

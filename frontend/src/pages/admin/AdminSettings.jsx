@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
-import { Settings, Save, Upload, Globe, Phone, Mail, MapPin, Palette, DollarSign, Gift, Shield, Store, UserCog, FileText, ClipboardCheck } from 'lucide-react';
+import { Settings, Save, Upload, Globe, Phone, Mail, MapPin, Palette, DollarSign, Gift, Shield, Store, UserCog, FileText, ClipboardCheck, MessageSquare } from 'lucide-react';
 import DashboardLayout from '../../components/DashboardLayout';
-import { getSettings, updateSettings, uploadLogo } from '../../services/api';
+import { getSettings, updateSettings, uploadLogo, uploadImage } from '../../services/api';
 import { toast } from 'react-toastify';
 import { adminNavGroups as navItems } from './adminNavItems';
 import useSettingsStore from '../../store/settingsStore';
+import { getImageUrl } from '../../utils/imageHelper';
 
 const SettingsInputField = ({ label, value, onChange, type = 'text', placeholder = '', suffix = '' }) => (
   <div>
@@ -41,7 +42,15 @@ const AdminSettings = () => {
   const [saving, setSaving] = useState(false);
   const [tab, setTab] = useState('general');
   const fileRef = useRef(null);
+  const sealFileRef = useRef(null);
   const setSettingsLocal = useSettingsStore((s) => s.setSettingsLocal);
+
+  const [defaultPrinter, setDefaultPrinter] = useState(() => localStorage.getItem('default_printer') || '');
+
+  const handlePrinterChange = (val) => {
+    setDefaultPrinter(val);
+    localStorage.setItem('default_printer', val);
+  };
 
   useEffect(() => { fetchSettings(); }, []);
 
@@ -60,6 +69,42 @@ const AdminSettings = () => {
 
   const handleSocialChange = (field, value) => {
     setSettings(prev => ({ ...prev, socialLinks: { ...prev.socialLinks, [field]: value } }));
+  };
+
+  const handleTemplateChange = (section, field, value) => {
+    setSettings(prev => ({
+      ...prev,
+      documentTemplates: {
+        ...prev.documentTemplates,
+        [section]: {
+          ...(prev.documentTemplates?.[section] || {}),
+          [field]: value,
+        },
+      },
+    }));
+  };
+
+  const handleTemplateFieldToggle = (section, field) => {
+    setSettings(prev => {
+      const current = prev.documentTemplates?.[section]?.fields?.[field] !== false;
+      return {
+        ...prev,
+        documentTemplates: {
+          ...prev.documentTemplates,
+          [section]: {
+            ...(prev.documentTemplates?.[section] || {}),
+            fields: {
+              ...(prev.documentTemplates?.[section]?.fields || {}),
+              [field]: !current,
+            },
+          },
+        },
+      };
+    });
+  };
+
+  const handleSmsTemplateChange = (field, value) => {
+    setSettings(prev => ({ ...prev, smsTemplates: { ...prev.smsTemplates, [field]: value } }));
   };
 
   const handleSave = async () => {
@@ -94,6 +139,24 @@ const AdminSettings = () => {
     }
   };
 
+  const handleSealUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    e.target.value = '';
+    const formData = new FormData();
+    formData.append('image', file);
+    try {
+      const { data } = await uploadImage(formData);
+      const sealPath = data.url;
+      const merged = { ...settings, sealUrl: sealPath, seal: sealPath };
+      setSettings(merged);
+      setSettingsLocal(merged);
+      toast.success('Seal uploaded successfully! ✅');
+    } catch (err) {
+      toast.error('Failed to upload seal: ' + (err.response?.data?.message || err.message));
+    }
+  };
+
   if (loading) return <DashboardLayout navItems={navItems} title="Mobile Hub Admin Panel"><div className="flex items-center justify-center h-64"><div className="w-10 h-10 border-4 border-primary-blue border-t-transparent rounded-full animate-spin" /></div></DashboardLayout>;
 
   const tabs = [
@@ -101,7 +164,8 @@ const AdminSettings = () => {
     { key: 'contact', label: 'Contact', icon: Phone },
     { key: 'commerce', label: 'Commerce', icon: DollarSign },
     { key: 'loyalty', label: 'Loyalty', icon: Gift },
-    { key: 'receipt', label: 'Receipt/POS', icon: FileText },
+    { key: 'receipt', label: 'Receipt/A4 Designer', icon: FileText },
+    { key: 'templates', label: 'Templates', icon: ClipboardCheck },
     { key: 'permissions', label: 'Permissions', icon: UserCog },
     { key: 'social', label: 'Social', icon: Palette },
     { key: 'advanced', label: 'Advanced', icon: Shield },
@@ -140,7 +204,7 @@ const AdminSettings = () => {
               <div className="flex items-center gap-6 mb-6">
                 <div className="w-24 h-24 rounded-2xl border-2 border-dashed border-card-border flex items-center justify-center overflow-hidden bg-gray-50">
                   {(settings.logoUrl || settings.logo) ? (
-                    <img src={settings.logoUrl || settings.logo} alt="Logo" className="w-full h-full object-cover" />
+                    <img src={getImageUrl(settings.logoUrl || settings.logo)} alt="Logo" className="w-full h-full object-cover" />
                   ) : (
                     <Store size={32} className="text-gray-300" />
                   )}
@@ -250,42 +314,440 @@ const AdminSettings = () => {
 
         {/* Receipt Settings */}
         {tab === 'receipt' && (
-          <div className="space-y-6">
-            <div className="bg-white rounded-2xl border border-card-border p-6 shadow-sm">
-              <h2 className="font-semibold text-dark-navy mb-4 flex items-center gap-2"><FileText size={18} /> Receipt Customization</h2>
-              <p className="text-xs text-muted-text mb-6">Customize the appearance and legal text on your POS invoices/receipts.</p>
-              
-              <div className="space-y-4">
-                <SettingsTextArea 
-                  label="Warranty Terms" 
-                  value={settings.receiptSettings?.warrantyTerms} 
-                  onChange={(v) => handleChange('receiptSettings', { ...settings.receiptSettings, warrantyTerms: v })}
-                  placeholder="Standard 1-year manufacturer warranty applies..." 
-                />
-                <SettingsTextArea 
-                  label="Terms & Conditions" 
-                  value={settings.receiptSettings?.termsAndConditions} 
-                  onChange={(v) => handleChange('receiptSettings', { ...settings.receiptSettings, termsAndConditions: v })}
-                  placeholder="Goods sold are not returnable..." 
-                />
-                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
+          <div className="grid lg:grid-cols-2 gap-6">
+            {/* Left Column: Settings Panel */}
+            <div className="space-y-6">
+              <div className="bg-white rounded-2xl border border-card-border p-6 shadow-sm">
+                <h2 className="font-semibold text-dark-navy mb-2 flex items-center gap-2"><FileText size={18} /> Receipt / Invoice Designer</h2>
+                <p className="text-xs text-muted-text mb-6">Customize design templates, fonts, branding details, and legal text.</p>
+
+                <div className="space-y-4">
+                  {/* Template Style */}
                   <div>
-                    <p className="text-sm font-semibold text-dark-navy">Show Warranty on Receipt</p>
-                    <p className="text-xs text-muted-text">Explicitly print warranty info for each line item if available</p>
+                    <label className="text-xs font-semibold text-muted-text block mb-1">Layout Style Template</label>
+                    <select
+                      value={settings.receiptSettings?.layoutStyle || 'receipt'}
+                      onChange={(e) => handleChange('receiptSettings', { ...settings.receiptSettings, layoutStyle: e.target.value })}
+                      className="w-full border border-card-border rounded-xl py-2.5 px-3 text-sm bg-white"
+                    >
+                      <option value="receipt">80mm Thermal Receipt (POS)</option>
+                      <option value="a4">A4 Professional Invoice (Billing)</option>
+                    </select>
                   </div>
-                  <button onClick={() => handleChange('receiptSettings', { ...settings.receiptSettings, showWarranty: !settings.receiptSettings?.showWarranty })}
-                    className={`w-12 h-6 rounded-full transition-colors relative ${settings.receiptSettings?.showWarranty !== false ? 'bg-blue-500' : 'bg-gray-300'}`}>
-                    <div className={`w-4.5 h-4.5 bg-white rounded-full absolute top-[3px] transition-all shadow-md ${settings.receiptSettings?.showWarranty !== false ? 'right-[3px]' : 'left-[3px]'}`} />
-                  </button>
+
+                  {/* Theme Color */}
+                  <div>
+                    <label className="text-xs font-semibold text-muted-text block mb-1">Brand Theme Accent Color</label>
+                    <div className="flex gap-2 items-center">
+                      <input
+                        type="color"
+                        value={settings.receiptSettings?.themeColor || '#3b82f6'}
+                        onChange={(e) => handleChange('receiptSettings', { ...settings.receiptSettings, themeColor: e.target.value })}
+                        className="w-10 h-10 border border-card-border rounded-lg cursor-pointer"
+                      />
+                      <input
+                        type="text"
+                        value={settings.receiptSettings?.themeColor || '#3b82f6'}
+                        onChange={(e) => handleChange('receiptSettings', { ...settings.receiptSettings, themeColor: e.target.value })}
+                        placeholder="#3b82f6"
+                        className="flex-1 border border-card-border rounded-xl py-2 px-3 text-sm font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Header Title */}
+                  <SettingsInputField
+                    label="Header Logo / Title Text"
+                    value={settings.receiptSettings?.headerTitle || settings.shopName}
+                    onChange={(v) => handleChange('receiptSettings', { ...settings.receiptSettings, headerTitle: v })}
+                    placeholder="e.g. Mobile Hub Corner"
+                  />
+
+                  {/* Subtitle / Branch details */}
+                  <SettingsInputField
+                    label="Header Subtitle / Contact Info"
+                    value={settings.receiptSettings?.subtitle || settings.address}
+                    onChange={(v) => handleChange('receiptSettings', { ...settings.receiptSettings, subtitle: v })}
+                    placeholder="e.g. 88 Tech Avenue, Colombo 03"
+                  />
+
+                  {/* Official Store Seal Upload */}
+                  <div>
+                    <label className="text-xs font-semibold text-muted-text block mb-1">Official Store Seal Image</label>
+                    <div className="flex items-center gap-4">
+                      <div className="w-16 h-16 rounded-xl border border-card-border flex items-center justify-center overflow-hidden bg-gray-50">
+                        {(settings.sealUrl || settings.seal) ? (
+                          <img src={getImageUrl(settings.sealUrl || settings.seal)} alt="Store Seal" className="w-full h-full object-cover" />
+                        ) : (
+                          <span className="text-[10px] text-muted-text">No Seal</span>
+                        )}
+                      </div>
+                      <div>
+                        <button
+                          type="button"
+                          onClick={() => sealFileRef.current?.click()}
+                          className="flex items-center gap-1.5 bg-gray-100 hover:bg-gray-200 text-dark-navy text-xs font-medium px-3 py-2 rounded-lg transition-colors border border-card-border"
+                        >
+                          <Upload size={12} /> Upload Seal
+                        </button>
+                        <input
+                          ref={sealFileRef}
+                          type="file"
+                          accept="image/*"
+                          onChange={handleSealUpload}
+                          className="hidden"
+                        />
+                        <p className="text-[10px] text-muted-text mt-1">Rendered on official POS bills.</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Letterhead Header Textarea */}
+                  <SettingsTextArea
+                    label="Letterhead Header Text (A4 Invoice)"
+                    value={settings.letterheadHeader}
+                    onChange={(v) => handleChange('letterheadHeader', v)}
+                    placeholder="e.g. SMART MOBILE HUB (PVT) LTD\nNo. 12, Galle Road, Colombo\nReg: PV-12345"
+                  />
+
+                  {/* Letterhead Footer Textarea */}
+                  <SettingsTextArea
+                    label="Letterhead Footer Text (A4 Invoice)"
+                    value={settings.letterheadFooter}
+                    onChange={(v) => handleChange('letterheadFooter', v)}
+                    placeholder="e.g. Thank you for shopping with us!\nContact: info@smartmobile.lk | Web: smartmobile.lk"
+                  />
+
+                  {/* Default Printer Selection */}
+                  <div>
+                    <label className="text-xs font-semibold text-muted-text block mb-1">Default Local Printer Assignment</label>
+                    <select
+                      value={defaultPrinter}
+                      onChange={(e) => handlePrinterChange(e.target.value)}
+                      className="w-full border border-card-border rounded-xl py-2.5 px-3 text-sm bg-white"
+                    >
+                      <option value="">-- No Default (Prompt System Dialogue) --</option>
+                      <option value="Microsoft Print to PDF">Microsoft Print to PDF</option>
+                      <option value="XP-80 Thermal Printer">XP-80 Thermal Printer (80mm)</option>
+                      <option value="Canon LBP2900">Canon LBP2900 (A4 Laser)</option>
+                      <option value="Epson L3110">Epson L3110 Series</option>
+                    </select>
+                    <p className="text-[10px] text-muted-text mt-1 font-mono">Current assignment saved in LocalStorage.</p>
+                  </div>
+
+                  {/* Footer Message */}
+                  <SettingsInputField
+                    label="Footer Greeting Message"
+                    value={settings.receiptSettings?.footerMessage || 'Thank you for your purchase!'}
+                    onChange={(v) => handleChange('receiptSettings', { ...settings.receiptSettings, footerMessage: v })}
+                    placeholder="e.g. Thank you! Visit us again."
+                  />
+
+                  {/* Warranty Terms */}
+                  <SettingsTextArea
+                    label="Warranty & Serial Disclaimers"
+                    value={settings.receiptSettings?.warrantyTerms}
+                    onChange={(v) => handleChange('receiptSettings', { ...settings.receiptSettings, warrantyTerms: v })}
+                    placeholder="Standard manufacturer warranty applies..."
+                  />
+
+                  {/* Terms & Conditions */}
+                  <SettingsTextArea
+                    label="Return / Exchange Policy Statement"
+                    value={settings.receiptSettings?.termsAndConditions}
+                    onChange={(v) => handleChange('receiptSettings', { ...settings.receiptSettings, termsAndConditions: v })}
+                    placeholder="Goods sold are not returnable..."
+                  />
+
+                  {/* Show Warranty Toggle */}
+                  <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl border border-gray-100">
+                    <div>
+                      <p className="text-sm font-semibold text-dark-navy">Show Warranty Periods</p>
+                      <p className="text-xs text-muted-text">Print the warranty details next to each line item</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleChange('receiptSettings', { ...settings.receiptSettings, showWarranty: !settings.receiptSettings?.showWarranty })}
+                      className={`w-12 h-6 rounded-full transition-colors relative ${settings.receiptSettings?.showWarranty !== false ? 'bg-blue-500' : 'bg-gray-300'}`}
+                    >
+                      <div className={`w-4.5 h-4.5 bg-white rounded-full absolute top-[3px] transition-all shadow-md ${settings.receiptSettings?.showWarranty !== false ? 'right-[3px]' : 'left-[3px]'}`} />
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
 
-            <div className="bg-indigo-50 rounded-xl p-4 text-xs text-indigo-700 flex gap-3">
-              <ClipboardCheck className="flex-shrink-0" size={18} />
-              <div>
-                <p className="font-bold mb-1">Receipt Tip:</p>
-                <p>These settings will be automatically applied to all new POS transactions. You can also override the warranty period per-product in the Inventory manager.</p>
+            {/* Right Column: Real-time Live Preview Side Panel */}
+            <div className="bg-gray-50 border border-card-border rounded-2xl p-6 flex flex-col justify-start items-center sticky top-6 shadow-inner" style={{ minHeight: '500px' }}>
+              <h3 className="font-semibold text-dark-navy mb-1 self-start">📄 Document Live Preview</h3>
+              <p className="text-xs text-muted-text mb-4 self-start">Visual representation of the printed template</p>
+
+              {/* Thermal Receipt Preview */}
+              {(settings.receiptSettings?.layoutStyle || 'receipt') === 'receipt' ? (
+                <div className="w-[300px] bg-white border border-gray-300 shadow-lg p-5 font-mono text-[11px] text-dark-navy relative overflow-hidden" style={{ minHeight: '400px', borderStyle: 'dashed' }}>
+                  <div className="text-center mb-4">
+                    {(settings.logoUrl || settings.logo) && (
+                      <img src={getImageUrl(settings.logoUrl || settings.logo)} alt="Logo" className="w-12 h-12 object-contain mx-auto mb-2 opacity-80" />
+                    )}
+                    <h4 className="font-bold text-sm uppercase">{settings.receiptSettings?.headerTitle || settings.shopName}</h4>
+                    <p className="text-[10px] text-muted-text">{settings.receiptSettings?.subtitle || settings.address}</p>
+                    <p className="text-[10px] text-muted-text">Tel: {settings.phone}</p>
+                  </div>
+
+                  <div className="border-b border-dashed border-gray-400 my-2" />
+
+                  <div className="space-y-1">
+                    <p>Date: {new Date().toLocaleDateString()} {new Date().toLocaleTimeString()}</p>
+                    <p>Invoice: #INV-28491029</p>
+                    <p>Cashier: {settings.shopName} Staff</p>
+                  </div>
+
+                  <div className="border-b border-dashed border-gray-400 my-2" />
+
+                  <table className="w-full text-left font-mono text-[11px]">
+                    <thead>
+                      <tr className="border-b border-gray-300">
+                        <th>Item</th>
+                        <th className="text-center">Qty</th>
+                        <th className="text-right">Price</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td className="py-1">
+                          <p>iPhone 15 Pro Max (256GB)</p>
+                          <p className="text-[9px] text-muted-text">IMEI: 359182930491823</p>
+                          {settings.receiptSettings?.showWarranty !== false && (
+                            <p className="text-[9px] text-blue-600 font-sans font-semibold">Warranty: 12 Months</p>
+                          )}
+                        </td>
+                        <td className="text-center py-1">1</td>
+                        <td className="text-right py-1">Rs. 320,000</td>
+                      </tr>
+                      <tr>
+                        <td className="py-1">
+                          <p>Anker Nano USB-C Charger</p>
+                          {settings.receiptSettings?.showWarranty !== false && (
+                            <p className="text-[9px] text-blue-600 font-sans font-semibold">Warranty: 6 Months</p>
+                          )}
+                        </td>
+                        <td className="text-center py-1">1</td>
+                        <td className="text-right py-1">Rs. 8,500</td>
+                      </tr>
+                    </tbody>
+                  </table>
+
+                  <div className="border-b border-dashed border-gray-400 my-2" />
+
+                  <div className="space-y-1 text-right">
+                    <p>Subtotal: Rs. 328,500</p>
+                    <p>VAT (8%): Rs. 26,280</p>
+                    <p className="font-bold text-xs">Grand Total: Rs. 354,780</p>
+                  </div>
+
+                  <div className="border-b border-dashed border-gray-400 my-2" />
+
+                  <div className="text-center space-y-2 text-[10px] mt-4 font-sans text-muted-text">
+                    <p className="font-bold">{settings.receiptSettings?.footerMessage || 'Thank you for your purchase!'}</p>
+                    <p className="italic text-[9px]">{settings.receiptSettings?.termsAndConditions}</p>
+                    <p className="italic text-[9px]">{settings.receiptSettings?.warrantyTerms}</p>
+                    {(settings.sealUrl || settings.seal) && (
+                      <div className="flex justify-center mt-2">
+                        <img src={getImageUrl(settings.sealUrl || settings.seal)} alt="Store Seal" className="w-12 h-12 object-contain opacity-70" />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                /* A4 Invoice Preview */
+                <div className="w-[380px] bg-white border border-gray-200 shadow-lg p-6 font-sans text-[10px] text-dark-navy relative overflow-hidden" style={{ minHeight: '480px' }}>
+                  {/* Top Color Accent Line */}
+                  <div className="absolute top-0 left-0 right-0 h-1.5" style={{ backgroundColor: settings.receiptSettings?.themeColor || '#3b82f6' }} />
+
+                  <div className="flex justify-between items-start mb-6 mt-2">
+                    <div>
+                      {(settings.logoUrl || settings.logo) && (
+                        <img src={getImageUrl(settings.logoUrl || settings.logo)} alt="Logo" className="w-14 h-14 object-contain mb-2 opacity-95" />
+                      )}
+                      {settings.letterheadHeader ? (
+                        <pre className="font-sans text-[10px] leading-relaxed text-dark-navy whitespace-pre-line">
+                          {settings.letterheadHeader}
+                        </pre>
+                      ) : (
+                        <>
+                          <h4 className="font-bold text-sm uppercase text-dark-navy" style={{ color: settings.receiptSettings?.themeColor || '#1e3a8a' }}>
+                            {settings.receiptSettings?.headerTitle || settings.shopName}
+                          </h4>
+                          <p className="text-muted-text">{settings.receiptSettings?.subtitle || settings.address}</p>
+                          <p className="text-muted-text">Email: {settings.email} | Tel: {settings.phone}</p>
+                        </>
+                      )}
+                    </div>
+                    <div className="text-right">
+                      <h3 className="text-sm font-bold uppercase tracking-wider text-muted-text">Invoice</h3>
+                      <p className="font-bold mt-1">#INV-28491029</p>
+                      <p className="text-muted-text">Date: {new Date().toLocaleDateString()}</p>
+                    </div>
+                  </div>
+
+                  <div className="border-b border-gray-200 my-4" />
+
+                  {/* Customer / Billed To Section */}
+                  <div className="grid grid-cols-2 gap-4 mb-4">
+                    <div>
+                      <p className="font-bold text-muted-text uppercase text-[8px] tracking-wider">Billed To:</p>
+                      <p className="font-bold text-dark-navy">John Doe</p>
+                      <p className="text-muted-text">+94 77 123 4567</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-bold text-muted-text uppercase text-[8px] tracking-wider">Payment Details:</p>
+                      <p className="font-bold text-dark-navy">Split Payment Method</p>
+                      <p className="text-muted-text">Cash / Card</p>
+                    </div>
+                  </div>
+
+                  {/* Products Table */}
+                  <table className="w-full text-left text-[9px] mb-6 border-collapse">
+                    <thead>
+                      <tr className="border-b-2 border-gray-200 text-muted-text uppercase font-bold text-[8px]">
+                        <th className="py-2">Item Description</th>
+                        <th className="py-2 text-center">Qty</th>
+                        <th className="py-2 text-right">Unit Price</th>
+                        <th className="py-2 text-right">Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      <tr>
+                        <td className="py-2">
+                          <p className="font-semibold text-dark-navy">iPhone 15 Pro Max (256GB)</p>
+                          <p className="text-[8px] text-muted-text font-mono">IMEI: 359182930491823</p>
+                          {settings.receiptSettings?.showWarranty !== false && (
+                            <p className="text-[8px] text-blue-600 font-semibold">Warranty: 12 Months</p>
+                          )}
+                        </td>
+                        <td className="text-center py-2">1</td>
+                        <td className="text-right py-2">Rs. 320,000</td>
+                        <td className="text-right py-2 font-semibold">Rs. 320,000</td>
+                      </tr>
+                      <tr>
+                        <td className="py-2">
+                          <p className="font-semibold text-dark-navy">Anker Nano USB-C Charger</p>
+                          {settings.receiptSettings?.showWarranty !== false && (
+                            <p className="text-[8px] text-blue-600 font-semibold">Warranty: 6 Months</p>
+                          )}
+                        </td>
+                        <td className="text-center py-2">1</td>
+                        <td className="text-right py-2">Rs. 8,500</td>
+                        <td className="text-right py-2 font-semibold">Rs. 8,500</td>
+                      </tr>
+                    </tbody>
+                  </table>
+
+                  {/* Totals Section */}
+                  <div className="flex justify-between items-start gap-4">
+                    <div className="w-1/2 text-[8px] text-muted-text space-y-1">
+                      <p className="font-bold uppercase tracking-wider text-dark-navy">Taxes & Disclaimers</p>
+                      <p className="italic">{settings.receiptSettings?.warrantyTerms}</p>
+                      <p className="italic">{settings.receiptSettings?.termsAndConditions}</p>
+                    </div>
+                    <div className="w-1/2 text-right space-y-1.5 text-[9px]">
+                      <div className="flex justify-between">
+                        <span className="text-muted-text">Subtotal:</span>
+                        <span className="font-semibold">Rs. 328,500</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-text">Taxes (8%):</span>
+                        <span className="font-semibold">Rs. 26,280</span>
+                      </div>
+                      <div className="flex justify-between border-t border-gray-200 pt-1 text-sm font-bold" style={{ color: settings.receiptSettings?.themeColor || '#3b82f6' }}>
+                        <span>Total:</span>
+                        <span>Rs. 354,780</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-between items-end mt-6 pt-3 border-t border-gray-100">
+                    <div className="w-2/3 text-[9px] text-muted-text">
+                      {settings.letterheadFooter ? (
+                        <pre className="font-sans text-[9px] leading-relaxed whitespace-pre-line text-left">
+                          {settings.letterheadFooter}
+                        </pre>
+                      ) : (
+                        <p>{settings.receiptSettings?.footerMessage || 'Thank you for your purchase!'}</p>
+                      )}
+                    </div>
+                    <div className="w-1/3 flex justify-end">
+                      {(settings.sealUrl || settings.seal) && (
+                        <div className="relative">
+                          <img src={getImageUrl(settings.sealUrl || settings.seal)} alt="Store Seal" className="w-14 h-14 object-contain opacity-75" />
+                          <span className="absolute bottom-0 right-0 text-[8px] text-gray-400 font-sans">Official Seal</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+        {/* Templates */}
+        {tab === 'templates' && (
+          <div className="space-y-6">
+            <div className="grid lg:grid-cols-3 gap-4">
+              {[
+                { key: 'paysheet', label: 'Paysheets', layouts: ['standard', 'compact'] },
+                { key: 'invoice', label: 'Invoices / Bills', layouts: ['a4', 'compact'] },
+                { key: 'posReceipt', label: 'POS Receipts', layouts: ['thermal', 'compact'] },
+              ].map((tpl) => {
+                const data = settings.documentTemplates?.[tpl.key] || {};
+                return (
+                  <div key={tpl.key} className="bg-white rounded-2xl border border-card-border p-5 shadow-sm">
+                    <h2 className="font-semibold text-dark-navy mb-4 flex items-center gap-2"><FileText size={17} /> {tpl.label}</h2>
+                    <div className="space-y-3">
+                      <SettingsInputField label="Document Title" value={data.title} onChange={(v) => handleTemplateChange(tpl.key, 'title', v)} />
+                      <div>
+                        <label className="text-xs font-medium text-muted-text block mb-1">Layout</label>
+                        <select value={data.layout || tpl.layouts[0]} onChange={(e) => handleTemplateChange(tpl.key, 'layout', e.target.value)} className="w-full border border-card-border rounded-xl py-2.5 px-3 text-sm bg-white">
+                          {tpl.layouts.map((layout) => <option key={layout} value={layout}>{layout}</option>)}
+                        </select>
+                      </div>
+                      <SettingsInputField label="Accent Color" value={data.accentColor} onChange={(v) => handleTemplateChange(tpl.key, 'accentColor', v)} placeholder="#2563eb" />
+                      <SettingsTextArea label="Footer Text" value={data.footerText} onChange={(v) => handleTemplateChange(tpl.key, 'footerText', v)} rows={2} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="bg-white rounded-2xl border border-card-border p-6 shadow-sm">
+              <h2 className="font-semibold text-dark-navy mb-4 flex items-center gap-2"><ClipboardCheck size={18} /> Paysheet Content Options</h2>
+              <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                {[
+                  ['showEmployeeRole', 'Employee Role'],
+                  ['showStore', 'Store'],
+                  ['showProcessedBy', 'Processed By'],
+                  ['showEmployerContributions', 'Employer EPF/ETF'],
+                ].map(([field, label]) => (
+                  <button
+                    key={field}
+                    type="button"
+                    onClick={() => handleTemplateFieldToggle('paysheet', field)}
+                    className={`px-4 py-3 rounded-xl border text-sm font-semibold text-left ${settings.documentTemplates?.paysheet?.fields?.[field] !== false ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-gray-50 border-gray-200 text-muted-text'}`}
+                  >
+                    {settings.documentTemplates?.paysheet?.fields?.[field] !== false ? 'Show' : 'Hide'} {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="bg-white rounded-2xl border border-card-border p-6 shadow-sm">
+              <h2 className="font-semibold text-dark-navy mb-2 flex items-center gap-2"><MessageSquare size={18} /> SMS Templates</h2>
+              <p className="text-xs text-muted-text mb-4">Use placeholders like {'{shopName}'}, {'{code}'}, {'{invoiceNo}'}, {'{total}'}, {'{orderNo}'}, and {'{status}'}.</p>
+              <div className="grid lg:grid-cols-2 gap-4">
+                <SettingsTextArea label="OTP Message" value={settings.smsTemplates?.otp} onChange={(v) => handleSmsTemplateChange('otp', v)} rows={2} />
+                <SettingsTextArea label="Payment Message" value={settings.smsTemplates?.payment} onChange={(v) => handleSmsTemplateChange('payment', v)} rows={2} />
+                <SettingsTextArea label="POS Receipt Message" value={settings.smsTemplates?.posReceipt} onChange={(v) => handleSmsTemplateChange('posReceipt', v)} rows={2} />
+                <SettingsTextArea label="Order Status Message" value={settings.smsTemplates?.orderStatus} onChange={(v) => handleSmsTemplateChange('orderStatus', v)} rows={2} />
               </div>
             </div>
           </div>

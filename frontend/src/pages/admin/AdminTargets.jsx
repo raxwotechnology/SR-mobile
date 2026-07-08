@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Plus, Target, Award, X, CheckCircle, Trash2 } from 'lucide-react';
 import DashboardLayout from '../../components/DashboardLayout';
+import DeleteConfirmationModal from '../../components/DeleteConfirmationModal';
 import { getTargets, getEmployees, createTarget, updateTargetProgress, payTargetBonus, deleteTarget } from '../../services/api';
 import { toast } from 'react-toastify';
 import { adminNavGroups as navItems } from './adminNavItems';
@@ -17,6 +18,8 @@ const AdminTargets = () => {
   const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState(null);
   const [filterMonth, setFilterMonth] = useState(new Date().getMonth() + 1);
   const [filterYear, setFilterYear] = useState(new Date().getFullYear());
   const [form, setForm] = useState({
@@ -83,11 +86,17 @@ const AdminTargets = () => {
     } catch (err) { toast.error(err.response?.data?.message || 'Failed'); }
   };
 
-  const handleDelete = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this target?')) return;
+  const handleDeleteClick = (target) => {
+    setItemToDelete(target);
+    setDeleteModalOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
     try {
-      await deleteTarget(id);
+      await deleteTarget(itemToDelete._id);
       toast.success('Target deleted');
+      setDeleteModalOpen(false);
+      setItemToDelete(null);
       fetchData();
     } catch (err) { toast.error(err.response?.data?.message || 'Failed to delete target'); }
   };
@@ -145,7 +154,7 @@ const AdminTargets = () => {
                   }`}>
                     {isCompleted ? '✅ Done' : t.status === 'missed' ? '❌ Missed' : '🔄 Active'}
                   </span>
-                  <button onClick={() => handleDelete(t._id)} className="ml-2 text-red-500 hover:text-red-700 p-1 rounded-md hover:bg-red-50">
+                  <button onClick={() => handleDeleteClick(t)} className="ml-2 text-red-500 hover:text-red-700 p-1 rounded-md hover:bg-red-50">
                     <Trash2 size={16} />
                   </button>
                 </div>
@@ -233,6 +242,13 @@ const AdminTargets = () => {
           </div>
         </div>
       )}
+
+      <DeleteConfirmationModal
+        isOpen={deleteModalOpen}
+        onClose={() => { setDeleteModalOpen(false); setItemToDelete(null); }}
+        onConfirm={handleDeleteConfirm}
+        itemName="this target"
+      />
     </DashboardLayout>
   );
 };

@@ -48,7 +48,7 @@ const AdminBarcodes = () => {
   const exportCSV = () => {
     if (logs.length === 0) return;
     const rows = [
-      ['Date', 'Time', 'User', 'Role', 'Product', 'SKU', 'Barcode', 'Quantity'].join(','),
+      ['Date', 'Time', 'User', 'Role', 'Product', 'SKU', 'Barcode', 'Quantity', 'Printer'].join(','),
       ...logs.map(l => [
         new Date(l.createdAt).toLocaleDateString(),
         new Date(l.createdAt).toLocaleTimeString(),
@@ -58,6 +58,7 @@ const AdminBarcodes = () => {
         l.sku || 'N/A',
         l.barcode,
         l.quantity,
+        `"${l.printerName || 'Default'}"`,
       ].join(','))
     ].join('\n');
     const blob = new Blob([rows], { type: 'text/csv' });
@@ -180,6 +181,7 @@ const AdminBarcodes = () => {
                     </th>
                     <th className="text-left px-5 py-3 font-medium text-muted-text">SKU</th>
                     <th className="text-left px-5 py-3 font-medium text-muted-text">Barcode</th>
+                    <th className="text-left px-5 py-3 font-medium text-muted-text">Printer</th>
                     <th className="text-center px-5 py-3 font-medium text-muted-text">Qty</th>
                   </tr>
                 </thead>
@@ -199,6 +201,7 @@ const AdminBarcodes = () => {
                       <td className="px-5 py-3.5 text-dark-navy max-w-48 truncate">{log.productName}</td>
                       <td className="px-5 py-3.5 font-mono text-xs text-muted-text">{log.sku || '—'}</td>
                       <td className="px-5 py-3.5 font-mono text-xs text-muted-text">{log.barcode}</td>
+                      <td className="px-5 py-3.5 text-xs text-muted-text font-medium">{log.printerName || 'Default'}</td>
                       <td className="px-5 py-3.5 text-center">
                         <span className="bg-blue-100 text-blue-700 text-xs font-bold px-2.5 py-1 rounded-full">
                           {log.quantity}

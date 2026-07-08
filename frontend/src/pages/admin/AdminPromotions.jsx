@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Plus, X, Trash2, ToggleLeft, ToggleRight, Tag, Gift, Percent, Calendar } from 'lucide-react';
 import DashboardLayout from '../../components/DashboardLayout';
+import DeleteConfirmationModal from '../../components/DeleteConfirmationModal';
 import { adminNavGroups as navItems } from './adminNavItems';
 import { getPromotions, createPromotion, deletePromotion, togglePromotion } from '../../services/api';
 import { toast } from 'react-toastify';
@@ -15,6 +16,8 @@ const PROMO_TYPES = [
 const AdminPromotions = () => {
   const [promotions, setPromotions] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState({
     name: '', type: 'percentage', discountValue: '', buyQuantity: '',
@@ -67,13 +70,21 @@ const AdminPromotions = () => {
     } catch (err) { toast.error('Failed'); }
   };
 
-  const handleDelete = async (id) => {
-    if (!window.confirm('Delete this promotion?')) return;
+  const handleDeleteClick = (promotion) => {
+    setItemToDelete(promotion);
+    setDeleteModalOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
     try {
-      await deletePromotion(id);
+      await deletePromotion(itemToDelete._id);
       toast.success('Deleted');
+      setDeleteModalOpen(false);
+      setItemToDelete(null);
       fetchPromotions();
-    } catch (err) { toast.error('Failed'); }
+    } catch (err) {
+      toast.error('Failed to delete');
+    }
   };
 
   const isExpired = (endDate) => new Date(endDate) < new Date();
@@ -125,7 +136,7 @@ const AdminPromotions = () => {
                     <button onClick={() => handleToggle(p._id)} title={p.isActive ? 'Deactivate' : 'Activate'} className="p-1.5 rounded-lg hover:bg-gray-100">
                       {p.isActive ? <ToggleRight size={20} className="text-emerald-500" /> : <ToggleLeft size={20} className="text-gray-400" />}
                     </button>
-                    <button onClick={() => handleDelete(p._id)} className="p-1.5 rounded-lg hover:bg-red-50 text-red-400 hover:text-red-600">
+                    <button onClick={() => handleDeleteClick(p)} className="p-1.5 rounded-lg hover:bg-red-50 text-red-400 hover:text-red-600">
                       <Trash2 size={16} />
                     </button>
                   </div>
@@ -246,6 +257,13 @@ const AdminPromotions = () => {
           </div>
         </div>
       )}
+
+      <DeleteConfirmationModal
+        isOpen={deleteModalOpen}
+        onClose={() => { setDeleteModalOpen(false); setItemToDelete(null); }}
+        onConfirm={handleDeleteConfirm}
+        itemName="this promotion"
+      />
     </DashboardLayout>
   );
 };

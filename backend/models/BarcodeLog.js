@@ -42,6 +42,10 @@ const barcodeLogSchema = new mongoose.Schema(
       enum: ['admin', 'manager', 'cashier'],
       required: true,
     },
+    printerName: {
+      type: String,
+      default: 'Default Printer',
+    },
   },
   {
     timestamps: true,

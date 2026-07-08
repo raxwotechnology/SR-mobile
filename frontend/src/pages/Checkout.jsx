@@ -552,7 +552,7 @@ const Checkout = () => {
                 return (
                   <div key={product._id || item.productId} className="flex items-center gap-3">
                     <img 
-                      src={getImageUrl(product.productLink || product.images?.[0]) || item.image || ''} 
+                      src={getImageUrl(product.productLink || product.images?.[0] || item.image) || ''} 
                       alt="" 
                       className="w-12 h-12 rounded-lg object-cover flex-shrink-0" 
                       onError={(e) => handleImageError(e, 'Product')}

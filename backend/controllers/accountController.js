@@ -11,6 +11,14 @@ const getAccounts = async (req, res, next) => {
     if (storeId) filter.storeId = storeId;
     
     const accounts = await Account.find(filter).sort({ name: 1 });
+    if (req.user && req.user.role === 'cashier') {
+      const safeAccounts = accounts.map(acc => {
+        const a = acc.toObject ? acc.toObject() : { ...acc };
+        delete a.balance;
+        return a;
+      });
+      return res.json(safeAccounts);
+    }
     res.json(accounts);
   } catch (error) { next(error); }
 };
@@ -78,9 +86,25 @@ const getAccountTransactions = async (req, res, next) => {
   } catch (error) { next(error); }
 };
 
+// @desc    Delete account
+// @route   DELETE /api/accounts/:id
+// @access  Private/Admin
+const deleteAccount = async (req, res, next) => {
+  try {
+    const account = await Account.findById(req.params.id);
+    if (!account) { 
+      res.status(404); 
+      return next(new Error('Account not found')); 
+    }
+    await account.deleteOne();
+    res.json({ message: 'Account deleted successfully' });
+  } catch (error) { next(error); }
+};
+
 module.exports = {
   getAccounts,
   createAccount,
   updateAccount,
+  deleteAccount,
   getAccountTransactions
 };

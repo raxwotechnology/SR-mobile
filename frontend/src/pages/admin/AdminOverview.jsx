@@ -25,11 +25,17 @@ const AdminOverview = () => {
           getStores(),
           getFinancialDashboard({ period: 'monthly', storeId: storeParam })
         ]);
+        console.log('Admin Dashboard Data Check:', {
+          stats: statsRes.data,
+          stores: storesRes.data,
+          financials: finRes.data
+        });
+
         setStats(statsRes.data);
         setStores(storesRes.data.stores || storesRes.data);
         setFinancials(finRes.data);
       } catch (err) {
-        console.error(err);
+        console.error('Dashboard Fetch Error:', err);
       } finally {
         setLoading(false);
       }
@@ -64,7 +70,7 @@ const AdminOverview = () => {
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6">
-            {cards.map((card) => (
+            {(Array.isArray(cards) ? cards : []).map((card) => (
               <div key={card.label} className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm flex flex-col justify-between h-40 hover:shadow-md transition-all">
                 <div className="flex items-center justify-between">
                   <div className={`w-12 h-12 rounded-xl ${card.bg} flex items-center justify-center`}>
@@ -106,7 +112,7 @@ const AdminOverview = () => {
               {/* Bar Chart */}
               <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
                 <h2 className="font-semibold text-slate-900 mb-4">Revenue vs Expenses</h2>
-                {(financials.series || financials.monthlyData) ? (
+                {financials && Array.isArray(financials.series || financials.monthlyData) ? (
                   <ResponsiveContainer width="100%" height={300}>
                     <BarChart data={financials.series || financials.monthlyData}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
@@ -126,7 +132,7 @@ const AdminOverview = () => {
               {/* Line Chart */}
               <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
                 <h2 className="font-semibold text-slate-900 mb-4">Profit Trend</h2>
-                {(financials.series || financials.monthlyData) ? (
+                {financials && Array.isArray(financials.series || financials.monthlyData) ? (
                   <ResponsiveContainer width="100%" height={300}>
                     <LineChart data={financials.series || financials.monthlyData}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />

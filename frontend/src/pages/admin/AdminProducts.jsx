@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Plus, Edit2, Trash2, Search, X, ChevronDown, ChevronUp, Package, Eye } from 'lucide-react';
 import DashboardLayout from '../../components/DashboardLayout';
-import { getAdminProducts, getCategories, getStores, createProduct, updateProduct, deleteProduct } from '../../services/api';
+import { getAdminProducts, getCategories, getStores, createProduct, updateProduct, deleteProduct, getSuppliers } from '../../services/api';
 import { toast } from 'react-toastify';
 import { adminNavGroups as navItems } from './adminNavItems';
 import useAdminStoreStore from '../../store/adminStoreStore';
@@ -9,20 +9,22 @@ import SuppliersPanel from '../inventory/SuppliersPanel';
 import StockReceivingPanel from '../inventory/StockReceivingPanel';
 import SupplierReturnsPanel from '../inventory/SupplierReturnsPanel';
 import { getImageUrl, handleImageError, isDirectImageUrl, convertExternalUrl } from '../../utils/imageHelper';
+import DeleteConfirmationModal from '../../components/DeleteConfirmationModal';
 
 const emptyForm = {
-  name: '', categoryId: '', description: '', price: '', mrp: '', discount: '', unit: 'kg',
-  stock: '', purchasePrice: '', images: '', isFeatured: false, isOnSale: false, allowKokoOnline: true, allowKokoPos: true, status: 'active', storeId: '', productLink: '',
+  name: '', categoryId: '', description: '', price: '', minPrice: '', mrp: '', discount: '', unit: 'kg',
+  stock: '', purchasePrice: '', images: '', isFeatured: false, isOnSale: false, allowKokoOnline: true, allowKokoPos: true, status: 'active', storeId: '', productLink: '', supplierId: '',
 };
 
 const AdminProducts = () => {
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [stores, setStores] = useState([]);
+  const [suppliers, setSuppliers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [activeTab, setActiveTab] = useState('products'); // products | suppliers | receiving | supplierReturns
-  const { selectedStoreId } = useAdminStoreStore();
+  const { selectedStoreId, setSelectedStoreId } = useAdminStoreStore();
   const [search, setSearch] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -30,19 +32,25 @@ const AdminProducts = () => {
   const [form, setForm] = useState(emptyForm);
   const [expandedProduct, setExpandedProduct] = useState(null);
 
+  // Password confirmation states
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState(null);
+
   const fetchData = async () => {
     try {
       setLoading(true);
       setError('');
       const storeParam = selectedStoreId !== 'all' ? selectedStoreId : undefined;
-      const [prodRes, catRes, storesRes] = await Promise.all([
+      const [prodRes, catRes, storesRes, suppRes] = await Promise.all([
         getAdminProducts({ storeId: storeParam }), 
         getCategories(), 
-        getStores()
+        getStores(),
+        getSuppliers().catch(() => ({ data: [] }))
       ]);
       setProducts(prodRes.data || []);
       setCategories(catRes.data || []);
       setStores(storesRes.data.stores || storesRes.data || []);
+      setSuppliers(suppRes.data || []);
     } catch (err) {
       const msg = err.response?.data?.message || 'Failed to load products';
       setError(msg);
@@ -67,6 +75,7 @@ const AdminProducts = () => {
       categoryId: product.categoryId?._id || '',
       description: product.description || '',
       price: product.price || '',
+      minPrice: product.minPrice || '',
       mrp: product.mrp || '',
       discount: product.discount || '',
       unit: product.unit || 'kg',
@@ -80,6 +89,7 @@ const AdminProducts = () => {
       status: product.status || 'active',
       storeId: product.storeId?._id || '',
       productLink: product.productLink || '',
+      supplierId: product.supplierId?._id || product.supplierId || '',
     });
     setShowModal(true);
   };
@@ -102,19 +112,33 @@ const AdminProducts = () => {
         finalImages.unshift(form.productLink);
       }
 
+      // Validate store is valid selection
+      const storeExists = stores.find(s => s._id === form.storeId);
+      if (!storeExists) {
+        toast.error('Please select a valid store from the suggestions');
+        setSaving(false);
+        return;
+      }
+
+      // Check minPrice validation
+      if (form.minPrice && Number(form.price) < Number(form.minPrice)) {
+        toast.error('Selling price cannot be lower than the configured minimum price');
+        setSaving(false);
+        return;
+      }
+
       const payload = {
         ...form,
         price: Number(form.price),
+        minPrice: Number(form.minPrice) || 0,
         mrp: Number(form.mrp) || Number(form.price),
         discount: Number(form.discount) || 0,
         stock: Number(form.stock),
         purchasePrice: Number(form.purchasePrice) || 0,
         images: finalImages,
+        supplierId: form.supplierId && form.supplierId !== 'none' ? form.supplierId : null,
       };
-      if (!payload.storeId) {
-        toast.error('Store is required');
-        return;
-      }
+
       if (editingId) {
         await updateProduct(editingId, payload);
         toast.success('Product updated');
@@ -131,10 +155,15 @@ const AdminProducts = () => {
     }
   };
 
-  const handleDelete = async (id) => {
-    if (!window.confirm('Delete this product?')) return;
+  const handleDeleteClick = (product) => {
+    setItemToDelete({ id: product._id, name: product.name });
+    setDeleteModalOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!itemToDelete) return;
     try {
-      await deleteProduct(id);
+      await deleteProduct(itemToDelete.id);
       toast.success('Product deleted');
       fetchData();
     } catch (err) {
@@ -186,7 +215,7 @@ const AdminProducts = () => {
         </div>
 
         {activeTab === 'suppliers' && (
-          <SuppliersPanel storeId={selectedStoreId !== 'all' ? selectedStoreId : ''} stores={stores} onStoreChange={() => {}} />
+          <SuppliersPanel storeId={selectedStoreId !== 'all' ? selectedStoreId : ''} stores={stores} onStoreChange={(id) => setSelectedStoreId(id)} />
         )}
         {activeTab === 'receiving' && (
           <StockReceivingPanel
@@ -307,7 +336,7 @@ const AdminProducts = () => {
                         <td className="px-6 py-3.5 text-right">
                           <div className="flex items-center justify-end gap-2">
                             <button onClick={() => openEdit(product)} className="p-2 rounded-lg hover:bg-slate-100 text-slate-500" title="View / Edit Details"><Eye size={16} /></button>
-                            <button onClick={() => handleDelete(product._id)} className="p-2 rounded-lg hover:bg-red-50 text-red-500" title="Delete"><Trash2 size={16} /></button>
+                            <button onClick={() => handleDeleteClick(product)} className="p-2 rounded-lg hover:bg-red-50 text-red-500" title="Delete"><Trash2 size={16} /></button>
                           </div>
                         </td>
                       </tr>
@@ -400,10 +429,21 @@ const AdminProducts = () => {
 
                   <div>
                     <label className="block text-sm font-medium text-dark-navy mb-1">Store *</label>
-                    <select required value={form.storeId} onChange={(e) => setForm({ ...form, storeId: e.target.value })} className="w-full border border-card-border rounded-xl py-2.5 px-4 text-sm">
-                      <option value="">Select store</option>
-                      {stores.map((s) => <option key={s._id} value={s._id}>{s.name}</option>)}
-                    </select>
+                    <input 
+                      list="store-suggestions"
+                      required
+                      placeholder="Type or select Store"
+                      value={stores.find(s => s._id === form.storeId)?.name || form.storeId || ''}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        const existing = stores.find(s => s.name.toLowerCase() === val.toLowerCase());
+                        setForm({ ...form, storeId: existing ? existing._id : val });
+                      }}
+                      className="w-full border border-card-border rounded-xl py-2.5 px-4 text-sm" 
+                    />
+                    <datalist id="store-suggestions">
+                      {stores.map((s) => <option key={s._id} value={s.name} />)}
+                    </datalist>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-dark-navy mb-1">Price *</label>
@@ -412,6 +452,10 @@ const AdminProducts = () => {
                   <div>
                     <label className="block text-sm font-medium text-dark-navy mb-1">MRP</label>
                     <input type="number" step="0.01" value={form.mrp} onChange={(e) => setForm({ ...form, mrp: e.target.value })} className="w-full border border-card-border rounded-xl py-2.5 px-4 text-sm" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-dark-navy mb-1">Minimum Price</label>
+                    <input type="number" step="0.01" value={form.minPrice} onChange={(e) => setForm({ ...form, minPrice: e.target.value })} className="w-full border border-card-border rounded-xl py-2.5 px-4 text-sm font-bold text-red-600 bg-red-50/20" placeholder="Minimum Selling Price" />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-dark-navy mb-1">Stock *</label>
@@ -424,6 +468,28 @@ const AdminProducts = () => {
                   <div>
                     <label className="block text-sm font-medium text-dark-navy mb-1">Discount %</label>
                     <input type="number" min="0" value={form.discount} onChange={(e) => setForm({ ...form, discount: e.target.value })} className="w-full border border-card-border rounded-xl py-2.5 px-4 text-sm" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-dark-navy mb-1">Supplier</label>
+                    <input 
+                      list="supplier-suggestions"
+                      placeholder="Search or select supplier"
+                      value={form.supplierId === 'none' ? 'None' : (suppliers.find(s => s._id === form.supplierId)?.name || form.supplierId || '')}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val.toLowerCase() === 'none' || val === '') {
+                          setForm({ ...form, supplierId: 'none' });
+                        } else {
+                          const existing = suppliers.find(s => s.name.toLowerCase() === val.toLowerCase());
+                          setForm({ ...form, supplierId: existing ? existing._id : val });
+                        }
+                      }}
+                      className="w-full border border-card-border rounded-xl py-2.5 px-4 text-sm" 
+                    />
+                    <datalist id="supplier-suggestions">
+                      <option value="None" />
+                      {suppliers.map((s) => <option key={s._id} value={s.name}>{s.company}</option>)}
+                    </datalist>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-dark-navy mb-1">Unit</label>
@@ -545,6 +611,13 @@ const AdminProducts = () => {
           </>
         )}
       </div>
+
+      <DeleteConfirmationModal
+        isOpen={deleteModalOpen}
+        onClose={() => { setDeleteModalOpen(false); setItemToDelete(null); }}
+        onConfirm={handleDeleteConfirm}
+        itemName={itemToDelete?.name}
+      />
     </DashboardLayout>
   );
 };

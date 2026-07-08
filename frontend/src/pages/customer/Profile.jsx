@@ -4,6 +4,7 @@ import DashboardLayout from '../../components/DashboardLayout';
 import { getMe, updateProfile, uploadImage } from '../../services/api';
 import { toast } from 'react-toastify';
 import useAuthStore from '../../store/authStore';
+import { getImageUrl } from '../../utils/imageHelper';
 import { Link } from 'react-router-dom';
 
 const navItems = [
@@ -17,6 +18,7 @@ const Profile = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [form, setForm] = useState({
     name: '',
     email: '',
@@ -107,6 +109,19 @@ const Profile = () => {
     }
   };
 
+  const handleRemoveAvatar = async () => {
+    setUploading(true);
+    try {
+      const { data: profileData } = await updateProfile({ avatar: '' });
+      login(profileData);
+      toast.success('Profile photo removed!');
+    } catch (err) {
+      toast.error('Failed to remove photo');
+    } finally {
+      setUploading(false);
+    }
+  };
+
   if (loading) {
     return (
       <DashboardLayout navItems={navItems} title="My Account">
@@ -132,7 +147,17 @@ const Profile = () => {
             <div className="flex items-center gap-6 mb-8">
               <div className="relative group">
                 {user?.avatar ? (
-                  <img src={user.avatar} alt="Profile" className="w-20 h-20 rounded-2xl object-cover shadow-sm border border-slate-200" />
+                  <>
+                    <img src={getImageUrl(user.avatar)} alt="Profile" className="w-20 h-20 rounded-2xl object-cover shadow-sm border border-slate-200" />
+                    <button
+                      type="button"
+                      onClick={() => setShowDeleteConfirm(true)}
+                      className="absolute -top-2 -right-2 bg-red-500 hover:bg-red-600 text-white p-1.5 rounded-full shadow-md z-20 transition-all hover:scale-110"
+                      title="Delete Photo"
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </>
                 ) : (
                   <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-emerald-100 to-teal-100 flex items-center justify-center shadow-sm border border-slate-200">
                     <User size={32} className="text-teal-600" />
@@ -271,6 +296,39 @@ const Profile = () => {
           </button>
         </form>
       </div>
+
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl border border-slate-100 p-6 space-y-4">
+            <div className="text-center space-y-2">
+              <div className="w-12 h-12 bg-red-50 text-red-500 rounded-full flex items-center justify-center mx-auto mb-2 text-xl">
+                ⚠️
+              </div>
+              <h3 className="font-extrabold text-slate-900 text-lg">Delete Profile Photo</h3>
+              <p className="text-sm text-slate-500">Are you sure you want to permanently delete your profile photo?</p>
+            </div>
+            <div className="flex gap-3 justify-center pt-2">
+              <button
+                type="button"
+                onClick={() => setShowDeleteConfirm(false)}
+                className="flex-1 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold hover:bg-slate-50 text-slate-600 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowDeleteConfirm(false);
+                  handleRemoveAvatar();
+                }}
+                className="flex-1 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm font-bold shadow-md transition-colors"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </DashboardLayout>
   );
 };

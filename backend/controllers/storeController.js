@@ -119,10 +119,28 @@ const updateStore = async (req, res, next) => {
   }
 };
 
+// @desc    Delete store
+// @route   DELETE /api/stores/:id
+// @access  Private/Admin
+const deleteStore = async (req, res, next) => {
+  try {
+    const store = await Store.findById(req.params.id);
+    if (!store) {
+      res.status(404);
+      return next(new Error('Store not found'));
+    }
+    await store.deleteOne();
+    res.json({ message: 'Store deleted successfully' });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   getStores,
   getStoreById,
   getMyStore,
   createStore,
   updateStore,
+  deleteStore,
 };

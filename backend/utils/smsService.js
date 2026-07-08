@@ -70,9 +70,46 @@ const sendBulkSms = async (contacts, message) => {
   return { success: true, provider: 'smslenz', data };
 };
 
-const buildOtpMessage = (otp) => `Your verification code is ${otp}`;
-const buildPaymentMessage = (amount) => `Payment successful. Amount: LKR ${Number(amount || 0).toFixed(2)}`;
-const buildPosReceiptMessage = (amount) => `Thank you for your purchase. Total: LKR ${Number(amount || 0).toFixed(2)}`;
+const applyTemplate = (template, values) => String(template || '').replace(/\{(\w+)\}/g, (_, key) => {
+  const value = values[key];
+  return value === undefined || value === null ? '' : String(value);
+});
+
+const getSmsTemplates = async () => {
+  try {
+    const Settings = require('../models/Settings');
+    const settings = await Settings.findOne().lean();
+    return {
+      shopName: settings?.shopName || 'Mobile Hub',
+      templates: settings?.smsTemplates || {},
+    };
+  } catch {
+    return { shopName: 'Mobile Hub', templates: {} };
+  }
+};
+
+const buildOtpMessage = async (otp) => {
+  const { shopName, templates } = await getSmsTemplates();
+  return applyTemplate(templates.otp || 'Your {shopName} OTP is {code}.', { shopName, code: otp });
+};
+
+const buildPaymentMessage = async (amount, values = {}) => {
+  const { shopName, templates } = await getSmsTemplates();
+  return applyTemplate(templates.payment || 'Payment received. Total: Rs. {total}. Thank you - {shopName}', {
+    shopName,
+    total: Number(amount || 0).toFixed(2),
+    ...values,
+  });
+};
+
+const buildPosReceiptMessage = async (amount, values = {}) => {
+  const { shopName, templates } = await getSmsTemplates();
+  return applyTemplate(templates.posReceipt || 'Thank you for shopping at {shopName}. Total Rs. {total}.', {
+    shopName,
+    total: Number(amount || 0).toFixed(2),
+    ...values,
+  });
+};
 
 module.exports = {
   sendSms,

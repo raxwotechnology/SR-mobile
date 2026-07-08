@@ -31,6 +31,11 @@ const useAuthStore = create((set) => ({
     set({ user: userData, isAuthenticated: true });
   },
 
+  setUser: (userData) => {
+    localStorage.setItem('userInfo', JSON.stringify(userData));
+    set({ user: userData });
+  },
+
   logout: () => {
     // Clear ALL possible auth/session data
     localStorage.removeItem('userInfo');

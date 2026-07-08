@@ -1,10 +1,13 @@
 import { useState, useEffect } from 'react';
-import { Trash2, Search, ToggleLeft, ToggleRight, Plus, Edit, X, Upload, CheckCircle, Eye } from 'lucide-react';
+import { Trash2, Search, ToggleLeft, ToggleRight, Plus, Edit, X, Upload, CheckCircle, Eye, AlertCircle } from 'lucide-react';
 import DashboardLayout from '../../components/DashboardLayout';
 import { getAdminUsers, createUser, updateUser, toggleUserStatus, deleteUser, uploadImage, uploadDocument, getAdminStores } from '../../services/api';
 import { toast } from 'react-toastify';
 import { adminNavGroups as navItems } from './adminNavItems';
 import useAdminStoreStore from '../../store/adminStoreStore';
+import DeleteConfirmationModal from '../../components/DeleteConfirmationModal';
+import { getImageUrl } from '../../utils/imageHelper';
+import useAuthStore from '../../store/authStore';
 
 const roleColors = {
   customer: 'bg-sky-100 text-sky-700',
@@ -16,9 +19,12 @@ const roleColors = {
 };
 
 const AdminUsers = () => {
+  const { user, setUser } = useAuthStore();
   const [users, setUsers] = useState([]);
   const [stores, setStores] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [toggleModalOpen, setToggleModalOpen] = useState(false);
+  const [userToToggle, setUserToToggle] = useState(null);
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -91,7 +97,10 @@ const AdminUsers = () => {
         // Only send password if changed
         const payload = { ...formData };
         if (!payload.password) delete payload.password;
-        await updateUser(editingUser._id, payload);
+        const { data: updatedUser } = await updateUser(editingUser._id, payload);
+        if (updatedUser && updatedUser._id === user?._id) {
+          setUser({ ...user, ...updatedUser });
+        }
         toast.success('User updated successfully');
       } else {
         await createUser(formData);
@@ -104,20 +113,38 @@ const AdminUsers = () => {
     }
   };
 
-  const handleToggleStatus = async (userId, userName, currentStatus) => {
+  const handleToggleStatus = (userId, userName, currentStatus) => {
     const action = currentStatus ? 'deactivate' : 'activate';
-    if (!window.confirm(`Are you sure you want to ${action} "${userName}"?`)) return;
-    try {
-      await toggleUserStatus(userId);
-      toast.success(`User ${action}d`);
-      fetchUsers();
-    } catch (err) { toast.error('Failed to toggle status'); }
+    setUserToToggle({ id: userId, name: userName, action });
+    setToggleModalOpen(true);
   };
 
-  const handleDelete = async (userId) => {
-    if (!window.confirm('Permanently delete this user? This cannot be undone.')) return;
+  const handleToggleConfirm = async () => {
+    if (!userToToggle) return;
     try {
-      await deleteUser(userId);
+      await toggleUserStatus(userToToggle.id);
+      toast.success(`User ${userToToggle.action}d successfully`);
+      fetchUsers();
+    } catch (err) {
+      toast.error('Failed to toggle status');
+    } finally {
+      setToggleModalOpen(false);
+      setUserToToggle(null);
+    }
+  };
+
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState(null);
+
+  const handleDeleteClick = (user) => {
+    setItemToDelete({ id: user._id, name: user.name });
+    setDeleteModalOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!itemToDelete) return;
+    try {
+      await deleteUser(itemToDelete.id);
       toast.success('User deleted');
       fetchUsers();
     } catch (err) { toast.error('Failed to delete user'); }
@@ -229,7 +256,7 @@ const AdminUsers = () => {
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-4">
                           {user.avatar ? (
-                            <img src={user.avatar} alt={user.name} className="w-10 h-10 rounded-full object-cover border border-slate-200" />
+                            <img src={getImageUrl(user.avatar)} alt={user.name} className="w-10 h-10 rounded-full object-cover border border-slate-200" />
                           ) : (
                             <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold">
                               {user.name?.charAt(0)?.toUpperCase()}
@@ -251,14 +278,22 @@ const AdminUsers = () => {
                         </span>
                       </td>
                       <td className="px-6 py-4">
-                        <button onClick={() => handleToggleStatus(user._id, user.name, user.isActive !== false)} className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-full transition-colors ${user.isActive !== false ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
-                          {user.isActive !== false ? <ToggleRight size={14} /> : <ToggleLeft size={14} />}
-                          {user.isActive !== false ? 'Active' : 'Inactive'}
-                        </button>
+                        <select
+                          value={user.isActive !== false ? 'active' : 'inactive'}
+                          onChange={() => handleToggleStatus(user._id, user.name, user.isActive !== false)}
+                          className={`text-xs font-bold px-3 py-1.5 rounded-xl border focus:outline-none focus:ring-2 focus:ring-blue-500 outline-none cursor-pointer ${
+                            user.isActive !== false 
+                              ? 'bg-emerald-50 border-emerald-200 text-emerald-700' 
+                              : 'bg-red-50 border-red-200 text-red-700'
+                          }`}
+                        >
+                          <option value="active">Active</option>
+                          <option value="inactive">Inactive</option>
+                        </select>
                       </td>
                       <td className="px-6 py-4 text-right space-x-2">
                         <button onClick={() => handleOpenModal(user)} className="p-2 bg-slate-50 text-slate-600 rounded-lg hover:bg-slate-100 transition-colors" title="View / Edit Details"><Eye size={16} /></button>
-                        <button onClick={() => handleDelete(user._id)} className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors" title="Delete"><Trash2 size={16} /></button>
+                        <button onClick={() => handleDeleteClick(user)} className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors" title="Delete"><Trash2 size={16} /></button>
                       </td>
                     </tr>
                   ))}
@@ -283,7 +318,17 @@ const AdminUsers = () => {
                 {/* Profile Photo */}
                 <div className="flex items-center gap-6">
                   {formData.avatar ? (
-                    <img src={formData.avatar} alt="Profile" className="w-24 h-24 rounded-2xl object-cover shadow-sm" />
+                    <div className="relative">
+                      <img src={getImageUrl(formData.avatar)} alt="Profile" className="w-24 h-24 rounded-2xl object-cover shadow-sm" />
+                      <button
+                        type="button"
+                        onClick={() => setFormData(prev => ({ ...prev, avatar: '' }))}
+                        className="absolute -top-2 -right-2 bg-red-500 hover:bg-red-600 text-white p-1.5 rounded-full shadow-md z-20 transition-all hover:scale-110"
+                        title="Delete Photo"
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
                   ) : (
                     <div className="w-24 h-24 rounded-2xl bg-slate-100 border-2 border-dashed border-slate-300 flex items-center justify-center text-slate-400">
                       <Upload size={32} />
@@ -386,6 +431,53 @@ const AdminUsers = () => {
         )}
 
       </div>
+
+      <DeleteConfirmationModal
+        isOpen={deleteModalOpen}
+        onClose={() => { setDeleteModalOpen(false); setItemToDelete(null); }}
+        onConfirm={handleDeleteConfirm}
+        itemName={itemToDelete?.name}
+      />
+
+      {/* Toggle Status Confirmation Modal */}
+      {toggleModalOpen && userToToggle && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl border border-slate-100 transform transition-all duration-300 scale-100 p-6" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-3 mb-4">
+              <div className={`p-3 rounded-2xl ${userToToggle.action === 'deactivate' ? 'bg-amber-50 text-amber-600' : 'bg-emerald-50 text-emerald-600'}`}>
+                <AlertCircle size={24} />
+              </div>
+              <div>
+                <h3 className="font-extrabold text-slate-900 text-lg capitalize">{userToToggle.action} User</h3>
+                <p className="text-xs text-slate-500 font-medium">Confirm status change</p>
+              </div>
+            </div>
+            
+            <p className="text-sm text-slate-600 font-medium mb-6">
+              Are you sure you want to <span className="font-bold text-slate-800">{userToToggle.action}</span> the employee account for <span className="font-bold text-dark-navy">"{userToToggle.name}"</span>?
+            </p>
+            
+            <div className="flex justify-end gap-3">
+              <button 
+                type="button" 
+                onClick={() => { setToggleModalOpen(false); setUserToToggle(null); }} 
+                className="px-5 py-2.5 font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-all text-sm"
+              >
+                Cancel
+              </button>
+              <button 
+                type="button" 
+                onClick={handleToggleConfirm} 
+                className={`px-6 py-2.5 text-white font-bold rounded-xl shadow-md transition-all text-sm ${
+                  userToToggle.action === 'deactivate' ? 'bg-amber-600 hover:bg-amber-700 shadow-amber-200' : 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200'
+                }`}
+              >
+                Yes, Confirm
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </DashboardLayout>
   );
 };

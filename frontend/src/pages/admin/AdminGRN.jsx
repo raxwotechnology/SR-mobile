@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Package, ShoppingBag, Plus, Trash2, Search, Printer, Eye, X, FileText, Calendar, Filter } from 'lucide-react';
 import DashboardLayout from '../../components/DashboardLayout';
-import { createStockReceipt, getStockReceipts, getSuppliers, getReceiptByGRN, getAdminProducts, getStores } from '../../services/api';
+import DeleteConfirmationModal from '../../components/DeleteConfirmationModal';
+import { createStockReceipt, getStockReceipts, getSuppliers, getReceiptByGRN, getAdminProducts, getStores, deleteStockReceipt } from '../../services/api';
 import { toast } from 'react-toastify';
 import { adminNavGroups as navItems } from './adminNavItems';
 import useAdminStoreStore from '../../store/adminStoreStore';
@@ -27,6 +28,8 @@ const AdminGRN = () => {
   const [grnFilter, setGrnFilter] = useState('');
   const [viewGrn, setViewGrn] = useState(null);
   const [printQty, setPrintQty] = useState({});
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState(null);
 
   const fetchData = async () => {
     try {
@@ -58,6 +61,23 @@ const AdminGRN = () => {
       setHistory(data || []);
     } catch {
       // ignore
+    }
+  };
+
+  const handleDeleteClick = (id, e) => {
+    if (e) e.stopPropagation();
+    setItemToDelete({ _id: id });
+    setDeleteModalOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    try {
+      await deleteStockReceipt(itemToDelete._id);
+      toast.success('GRN deleted successfully');
+      fetchHistory();
+      fetchData();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to delete GRN');
     }
   };
 
@@ -330,8 +350,9 @@ const AdminGRN = () => {
                       <div className="flex justify-between items-center mt-2">
                         <span className="text-[10px] bg-indigo-50 text-primary-blue px-2 py-0.5 rounded-full font-bold">Rs. {total.toLocaleString()}</span>
                         <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button onClick={(e) => { e.stopPropagation(); setViewGrn(r); }} className="p-1.5 text-blue-500 hover:bg-blue-50 rounded-lg"><Eye size={14} /></button>
-                          <button onClick={(e) => { e.stopPropagation(); printVoucher(r); }} className="p-1.5 text-emerald-500 hover:bg-emerald-50 rounded-lg"><Printer size={14} /></button>
+                          <button onClick={(e) => { e.stopPropagation(); setViewGrn(r); }} className="p-1.5 text-blue-500 hover:bg-blue-50 rounded-lg" title="View"><Eye size={14} /></button>
+                          <button onClick={(e) => { e.stopPropagation(); printVoucher(r); }} className="p-1.5 text-emerald-500 hover:bg-emerald-50 rounded-lg" title="Print"><Printer size={14} /></button>
+                          <button onClick={(e) => handleDeleteClick(r._id, e)} className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg" title="Delete"><Trash2 size={14} /></button>
                         </div>
                       </div>
                     </div>
@@ -420,6 +441,13 @@ const AdminGRN = () => {
           </div>
         )}
       </div>
+
+      <DeleteConfirmationModal
+        isOpen={deleteModalOpen}
+        onClose={() => { setDeleteModalOpen(false); setItemToDelete(null); }}
+        onConfirm={handleDeleteConfirm}
+        itemName="this GRN"
+      />
     </DashboardLayout>
   );
 };

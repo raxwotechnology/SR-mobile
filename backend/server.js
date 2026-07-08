@@ -19,10 +19,14 @@ if (!fs.existsSync(uploadDir)) {
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+
+
 // CORS: allow production frontend + any local dev port
 // Set CORS_ORIGINS in .env for custom domains (comma-separated)
 const envOrigins = (process.env.CORS_ORIGINS || '').split(',').map(o => o.trim()).filter(Boolean);
 const allowedOrigins = [
+  'https://max-durakathana.netlify.app',
+  'https://www.max-durakathana.netlify.app',
   'https://mobilehubtech.netlify.app',
   'https://www.mobilehubtech.netlify.app',
   'http://localhost:3000',
@@ -83,6 +87,7 @@ app.use('/api/predictions', require('./routes/predictionRoutes'));
 app.use('/api/overtime', require('./routes/overtimeRoutes'));
 app.use('/api/upload', require('./routes/uploadRoutes'));
 app.use('/api/reloads', require('./routes/reloadRoutes'));
+app.use('/api/repairs', require('./routes/repairRoutes'));
 
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 

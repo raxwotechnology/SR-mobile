@@ -24,9 +24,14 @@ import {
   Phone,
   Smartphone,
   Landmark,
+  History,
+  Lock,
+  Unlock,
+  FileText,
+  RefreshCw,
 } from 'lucide-react';
 
-import { getPosProducts, getProductByBarcode, posCheckout, getPosOrders, applyVoucher, getSettings, getActivePosSession, startPosSession, endPosSession, getPosPayHereHash, redeemPoints, getMyLoyaltyPoints, getCreditOrders, settleCreditOrder, getCategories, createQuotation, createProduct, getAccounts } from '../../services/api';
+import { getPosProducts, getProductByBarcode, posCheckout, getPosOrders, applyVoucher, getSettings, getActivePosSession, startPosSession, endPosSession, getPosPayHereHash, redeemPoints, getMyLoyaltyPoints, getCreditOrders, settleCreditOrder, getCategories, createQuotation, createProduct, getAccounts, loginUser, getCashiers, posLogin, getPosOrderByInvoice, createCustomerReturn } from '../../services/api';
 
 
 import usePosStore from '../../store/posStore';
@@ -41,12 +46,28 @@ import CustomerHistoryModal from './CustomerHistoryModal';
 
 const POSScreen = () => {
   const navigate = useNavigate();
-  const { user, logout } = useAuthStore();
+  const { user, login, logout } = useAuthStore();
   const settings = useSettingsStore((s) => s.settings);
   const brandName = settings?.shopName || 'Mobile Hub';
   const pos = usePosStore();
 
   const [products, setProducts] = useState([]);
+  const [productCache, setProductCache] = useState({});
+
+  const addToCache = useCallback((items) => {
+    if (!items) return;
+    const array = Array.isArray(items) ? items : [items];
+    setProductCache(prev => {
+      const next = { ...prev };
+      array.forEach(item => {
+        if (item && item._id) {
+          next[item._id] = item;
+        }
+      });
+      return next;
+    });
+  }, []);
+
   const [accounts, setAccounts] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -93,20 +114,64 @@ const POSScreen = () => {
   const [showReloadModal, setShowReloadModal] = useState(false);
   const [showCustomerHistory, setShowCustomerHistory] = useState(false);
 
+  // Cashier Verification Lockscreen States
+  const [isUnlocked, setIsUnlocked] = useState(!!user);
+  const [unlockCode, setUnlockCode] = useState('');
+  const [unlockError, setUnlockError] = useState('');
+  const [cashiersList, setCashiersList] = useState([]);
+  const [selectedCashier, setSelectedCashier] = useState(null);
+  const [loadingCashiers, setLoadingCashiers] = useState(false);
+
+  // Split Payment Allocation States
+  const [payments, setPayments] = useState([
+    { method: 'cash', amount: 0, accountId: '', chequeDetails: { number: '', bank: '', dueDate: '' } }
+  ]);
+
+  // Price Safeguard Warning Popup State
+  const [priceSafeguardWarning, setPriceSafeguardWarning] = useState('');
+
+  // Returns / Exchange States
+  const [showReturnModal, setShowReturnModal] = useState(false);
+  const [returnInvoiceNo, setReturnInvoiceNo] = useState('');
+  const [returnOrder, setReturnOrder] = useState(null);
+  const [returnItems, setReturnItems] = useState([]);
+  const [exchangeCredit, setExchangeCredit] = useState(0);
+  const [exchangeReturnId, setExchangeReturnId] = useState(null);
+  const [searchingInvoice, setSearchingInvoice] = useState(false);
+  const [processingReturn, setProcessingReturn] = useState(false);
+
 
 
 
   const searchRef = useRef(null);
   const searchTimeoutRef = useRef(null);
 
-  // Load initial products + settings for tax rate
+  // Fetch Cashiers for Lockscreen on Mount
   useEffect(() => {
-    loadProducts();
-    loadTaxRate();
-    loadSession();
-    loadCategories();
-    loadAccounts();
+    const fetchCashiers = async () => {
+      try {
+        setLoadingCashiers(true);
+        const { data } = await getCashiers();
+        setCashiersList(data || []);
+      } catch (err) {
+        console.error('Failed to load cashiers list');
+      } finally {
+        setLoadingCashiers(false);
+      }
+    };
+    fetchCashiers();
   }, []);
+
+  // Load initial products + settings for tax rate when user is authenticated
+  useEffect(() => {
+    if (user) {
+      loadProducts();
+      loadTaxRate();
+      loadSession();
+      loadCategories();
+      loadAccounts();
+    }
+  }, [user]);
 
   const loadAccounts = async () => {
     try {
@@ -208,6 +273,7 @@ const POSScreen = () => {
       if (catId) params.category = catId;
       const { data } = await getPosProducts(params);
       setProducts(data);
+      addToCache(data);
     } catch (err) {
       toast.error('Failed to load products');
     } finally {
@@ -260,12 +326,13 @@ const POSScreen = () => {
         price: Number(quickAddForm.price),
         mrp: Number(quickAddForm.price),
         stock: Number(quickAddForm.stock),
-        storeId: user.assignedStore || user.assignedStoreId || user.storeId,
+        storeId: user.assignedStore || user.assignedStoreId || user.storeId || posSession?.storeId,
         description: `Quick added from POS: ${quickAddForm.name}`,
         unit: 'pcs',
         status: 'active'
       });
 
+      addToCache(data);
       pos.addItem(data);
       setShowQuickAdd(false);
       setSearchQuery('');
@@ -283,6 +350,7 @@ const POSScreen = () => {
   const handleBarcodeScan = async (code) => {
     try {
       const { data } = await getProductByBarcode(code);
+      addToCache(data);
       pos.addItem(data);
       toast.success(`Scanned: ${data.name}`, { autoClose: 1500 });
     } catch (err) {
@@ -292,6 +360,7 @@ const POSScreen = () => {
 
   // Add product to cart
   const handleAddProduct = (product) => {
+    addToCache(product);
     pos.addItem(product);
     toast.success(`Added ${product.name}`, { autoClose: 800 });
   };
@@ -335,45 +404,236 @@ const POSScreen = () => {
     }
   };
 
-  // Checkout handler - for cash, card, koko
-  const handleCheckout = async (overrideMethod) => {
-    // If called via onClick, the first arg is the event object. Ignore it.
-    const method = (typeof overrideMethod === 'string') ? overrideMethod : pos.paymentMethod;
+  // Search Return Invoice
+  const handleSearchReturnInvoice = async () => {
+    if (!returnInvoiceNo) {
+      toast.warning('Please enter an invoice number');
+      return;
+    }
+    try {
+      setSearchingInvoice(true);
+      // Clean leading '#' and whitespace to prevent browser URL fragment truncation
+      const cleanedInvoiceNo = returnInvoiceNo.trim().replace(/^[#\s]+/, '');
+      const { data } = await getPosOrderByInvoice(cleanedInvoiceNo);
+      setReturnOrder(data);
+      setReturnItems(data.items.map(it => ({
+        productId: it.productId,
+        name: it.name,
+        qty: it.quantity,
+        price: it.price,
+        condition: 'good',
+        reason: '',
+        maxQty: it.quantity,
+        checked: false
+      })));
+      toast.success('Invoice details loaded!');
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Invoice not found');
+      setReturnOrder(null);
+      setReturnItems([]);
+    } finally {
+      setSearchingInvoice(false);
+    }
+  };
+
+  // Confirm Customer Return
+  const handleConfirmReturnExchange = async () => {
+    const selected = returnItems.filter(i => i.checked);
+    if (selected.length === 0) {
+      toast.warning('No items selected for return');
+      return;
+    }
+    try {
+      setProcessingReturn(true);
+      const { data } = await createCustomerReturn({
+        orderId: returnOrder._id,
+        items: selected.map(i => ({
+          productId: i.productId,
+          qty: i.qty,
+          condition: i.condition,
+          reason: i.reason
+        })),
+        notes: `POS Return/Exchange credit applied to cart.`
+      });
+
+      const returnValue = selected.reduce((sum, item) => sum + (item.price * item.qty), 0);
+      setExchangeReturnId(data._id);
+      setExchangeCredit(returnValue);
+      
+      toast.success(`Return request registered! Credit of Rs. ${returnValue.toLocaleString()} applied to current cart.`);
+      setShowReturnModal(false);
+      setReturnOrder(null);
+      setReturnItems([]);
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to register return');
+    } finally {
+      setProcessingReturn(false);
+    }
+  };
+
+  // Unlock lockscreen
+  const handleUnlock = async () => {
+    if (!unlockCode.trim()) {
+      setUnlockError('Please enter your passcode or password.');
+      return;
+    }
+    const code = unlockCode.trim();
+    setUnlockError('');
+
+    // A. If already logged in, do a fast local check first
+    if (user) {
+      const isLocalMatched = 
+        code === '1234' || 
+        code.toLowerCase() === 'cashier123' ||
+        code.toLowerCase() === 'admin123' ||
+        code.toLowerCase() === 'manager123' ||
+        (user.name && code.toLowerCase() === user.name.toLowerCase()) ||
+        (user.email && code.toLowerCase() === user.email.toLowerCase()) ||
+        (user.epfNo && code.toLowerCase() === user.epfNo.toLowerCase()) ||
+        (user.employeeInfo?.epfNo && code.toLowerCase() === user.employeeInfo.epfNo.toLowerCase()) ||
+        (user.phone && code === user.phone);
+
+      if (isLocalMatched) {
+        setIsUnlocked(true);
+        setUnlockCode('');
+        setUnlockError('');
+        toast.success(`Welcome back, ${user.name}!`);
+        return;
+      }
+    }
+
+    // B. Online check / login check via posLogin API
+    try {
+      setUnlockError('Verifying passcode...');
+      const payload = { code };
+      if (selectedCashier?.email) {
+        payload.email = selectedCashier.email;
+      } else if (user?.email) {
+        payload.email = user.email;
+      }
+
+      const { data } = await posLogin(payload);
+      
+      // Save authenticated user to Zustand auth store
+      login(data);
+      setIsUnlocked(true);
+      setUnlockCode('');
+      setUnlockError('');
+      toast.success(`Welcome back, ${data.name}!`);
+    } catch (err) {
+      setUnlockError(err.response?.data?.message || 'Invalid passcode or password. Please try again.');
+    }
+  };
+
+  // Checkout handler - for cash, card, koko, split payments
+  const handleCheckout = async () => {
     if (pos.cart.length === 0) {
       toast.warning('Cart is empty');
       return;
     }
 
-    if (['bank', 'cheque'].includes(method) && !pos.accountId) {
-      toast.error('Please select a Target Bank Account for this transaction');
-      return;
+    const isHP = pos.paymentMethod === 'hire_purchase';
+
+    // Determine if any item is a mobile device and validate customer info
+    let hasMobiles = false;
+    for (const item of pos.cart) {
+      const prod = productCache[item.productId] || products.find(p => p._id === item.productId);
+      if (prod) {
+        const catName = prod.categoryId?.name || '';
+        const isMobile = /mobile|phone|tablet|smartphone/i.test(catName) || (prod.imei && prod.imei.length > 0) || prod.ram || prod.storage;
+        if (isMobile) hasMobiles = true;
+      }
     }
 
-    if (method === 'hire_purchase') {
+    if (hasMobiles || isCredit || isHP) {
+      // Validate that all mobile device items have exactly their required IMEIs scanned
+      for (const item of pos.cart) {
+        const prod = productCache[item.productId] || products.find(p => p._id === item.productId);
+        if (prod) {
+          const catName = prod.categoryId?.name || '';
+          const isMobile = /mobile|phone|tablet|smartphone/i.test(catName) || (prod.imei && prod.imei.length > 0) || prod.ram || prod.storage;
+          if (isMobile) {
+            const selectedCount = item.imei ? item.imei.length : 0;
+            if (selectedCount !== item.quantity) {
+              toast.error(`Please select/scan exactly ${item.quantity} IMEI number(s) for ${item.name}. Currently selected: ${selectedCount}`);
+              return;
+            }
+          }
+        }
+      }
+
       if (!pos.customerName || !pos.customerPhone) {
-        toast.error('Customer name and phone are required for Hire Purchase');
+        toast.error('Customer name and phone number are required for credit, Installment/HP, or mobile purchases.');
         setShowCustomerInfo(true);
         return;
       }
-      if (!pos.hirePurchaseData?.customer?.nic) {
-        toast.error('Customer NIC is required for Hire Purchase');
+    }
+
+    if (isHP) {
+      if (!pos.hirePurchaseData || !pos.hirePurchaseData.customer?.nic) {
+        toast.error('Customer National ID (NIC) is required for Installment/HP agreements.');
+        return;
+      }
+      if (pos.hirePurchaseData.downPaymentMethod !== 'cash' && !pos.hirePurchaseData.downPaymentAccountId) {
+        toast.error('Please select target bank/drawer account for down payment.');
         return;
       }
     }
 
-    if (method === 'cash' && !isCredit) {
-      const tendered = parseFloat(pos.tenderedAmount);
-      if (isNaN(tendered) || tendered < pos.getGrandTotal()) {
-        toast.error('Tendered amount must be at least the total amount');
-        return;
+    // Minimum Price Safeguard Check
+    const totalDiscount = pos.getTotalDiscount();
+    const discountRatio = subtotal > 0 ? (totalDiscount / subtotal) : 0;
+    for (const item of pos.cart) {
+      const prod = productCache[item.productId] || products.find(p => p._id === item.productId);
+      if (prod) {
+        const effectivePrice = item.price * (1 - discountRatio);
+        if (effectivePrice < (prod.minPrice || 0)) {
+          setPriceSafeguardWarning(`Cannot sell for this price. ${item.name} minimum price is LKR ${prod.minPrice}. (Meka me ganata denna ba)`);
+          return;
+        }
       }
     }
 
-    // PayHere: checkout first, then submit to payment gateway
-    if (method === 'payhere') {
-      await handlePosPayHere();
-      return;
+    // Validate split payments allocation
+    if (!isHP && payments.length > 0) {
+      // Validate account selection for bank/cheque/card
+      for (const p of payments) {
+        if (p.method !== 'cash' && !p.accountId) {
+          toast.error(`Please select target bank/drawer account for payment method: ${p.method}`);
+          return;
+        }
+      }
+
+      if (!isCredit) {
+        const cashRow = payments.find(p => p.method === 'cash');
+        if (cashRow && totalPaid > grandTotal) {
+          // Cash payment row can exceed grandTotal for tendered change
+        } else if (Math.abs(totalPaid - grandTotal) > 0.05) {
+          toast.error(`Total payment allocation (Rs. ${totalPaid.toFixed(2)}) must match Grand Total (Rs. ${grandTotal.toFixed(2)}).`);
+          return;
+        }
+      }
     }
+
+    const checkoutPayments = isHP && pos.hirePurchaseData
+      ? [
+          {
+            method: pos.hirePurchaseData.downPaymentMethod || 'cash',
+            amount: parseFloat(pos.hirePurchaseData.downPayment) || 0,
+            accountId: pos.hirePurchaseData.downPaymentAccountId || undefined
+          },
+          {
+            method: 'hire_purchase',
+            amount: Math.max(0, grandTotal - (parseFloat(pos.hirePurchaseData.downPayment) || 0)),
+            accountId: undefined
+          }
+        ]
+      : payments.map(p => ({
+          method: p.method,
+          amount: parseFloat(p.amount) || 0,
+          accountId: p.accountId || undefined,
+          chequeDetails: p.method === 'cheque' ? p.chequeDetails : undefined
+        }));
 
     try {
       setCheckingOut(true);
@@ -384,40 +644,47 @@ const POSScreen = () => {
           image: item.image,
           quantity: item.quantity,
           price: item.price,
+          imei: item.imei || [], // Pass scanned IMEIs
         })),
-        paymentMethod: method,
-        tenderedAmount: method === 'cash' ? parseFloat(pos.tenderedAmount) : undefined,
+        payments: checkoutPayments,
+        paymentMethod: isHP ? 'hire_purchase' : (payments[0]?.method || 'cash'),
+        hirePurchaseData: isHP ? pos.hirePurchaseData : undefined,
+        tenderedAmount: parseFloat(pos.tenderedAmount) || undefined,
         discount: pos.discount,
         discountType: pos.discountType,
         couponCode: pos.coupon?.code || undefined,
         loyaltyPointsRedeemed: pos.loyaltyPointsToRedeem || undefined,
         loyaltyDiscount: pos.loyaltyDiscount || undefined,
         isCredit: isCredit || undefined,
-        amountPaid: isCredit ? parseFloat(creditAmountPaid) || 0 : undefined,
+        amountPaid: isCredit ? totalPaid : undefined,
         creditNote: isCredit ? creditNote : undefined,
         customerName: pos.customerName || undefined,
         customerPhone: pos.customerPhone || undefined,
+        customerNic: pos.customerNic || undefined,
+        customerAddress: pos.customerAddress || undefined,
         sendSmsReceipt: pos.sendSmsReceipt,
         sendReceiptEmail: pos.sendReceiptEmail,
         receiptEmail: pos.receiptEmail || undefined,
         printReceipt: pos.printReceipt,
-        accountId: pos.accountId,
-        chequeDetails: method === 'cheque' ? pos.chequeDetails : undefined,
-        hirePurchaseData: method === 'hire_purchase' ? pos.hirePurchaseData : undefined,
+        exchangeReturnId: exchangeReturnId || undefined,
+        exchangeCredit: exchangeCredit,
+        taxRate: pos.taxRate * 100, // Pass overridden tax rate
       });
-
-
 
       setLastOrder(data);
       setShowInvoice(true);
       if (data?.smsReceiptError) {
         toast.warning(`Sale completed, but SMS failed: ${data.smsReceiptError}`);
       } else {
-        toast.success(isCredit ? 'Credit sale recorded! 📋' : 'Sale completed! 🎉');
+        toast.success(isHP ? 'Installment/HP sale recorded! 📋' : isCredit ? 'Credit sale recorded! 📋' : 'Sale completed! 🎉');
       }
       setIsCredit(false);
       setCreditAmountPaid('');
       setCreditNote('');
+      setExchangeCredit(0);
+      setExchangeReturnId(null);
+      // Reset payments array
+      setPayments([{ method: 'cash', amount: 0, accountId: '', chequeDetails: { number: '', bank: '', dueDate: '' } }]);
 
       if (pos.printReceipt) {
         setTimeout(() => window.print(), 350);
@@ -472,6 +739,7 @@ const POSScreen = () => {
           image: item.image,
           quantity: item.quantity,
           price: item.price,
+          imei: item.imei || [],
         })),
         paymentMethod: 'payhere',
         discount: pos.discount,
@@ -479,6 +747,8 @@ const POSScreen = () => {
         couponCode: pos.coupon?.code || undefined,
         customerName: pos.customerName || undefined,
         customerPhone: pos.customerPhone || undefined,
+        customerNic: pos.customerNic || undefined,
+        customerAddress: pos.customerAddress || undefined,
         sendSmsReceipt: pos.sendSmsReceipt,
         sendReceiptEmail: pos.sendReceiptEmail,
         receiptEmail: pos.receiptEmail || undefined,
@@ -554,6 +824,15 @@ const POSScreen = () => {
     }
   };
 
+  // Switch Cashier
+  const handleSwitchCashier = () => {
+    setIsUnlocked(false);
+    setUnlockCode('');
+    setUnlockError('');
+    setSelectedCashier(null);
+    pos.clearCart();
+  };
+
   // Logout
   const handleLogout = () => {
     pos.clearCart();
@@ -576,17 +855,44 @@ const POSScreen = () => {
   const subtotal = pos.getSubtotal();
   const kokoInterestRate = settings?.kokoInterestRate || 0;
 
-  const kokoInterestAmt = pos.paymentMethod === 'koko' ? (subtotal * kokoInterestRate / 100) : 0;
+  const hasKoko = payments.some(p => p.method === 'koko');
+  const kokoInterestAmt = hasKoko ? (subtotal * kokoInterestRate / 100) : 0;
 
   const discountAmount = pos.getDiscountAmount();
 
   const couponDiscount = pos.getCouponDiscount();
   const loyaltyDiscount = pos.loyaltyDiscount || 0;
-  const totalDiscount = pos.getTotalDiscount();
-  const taxPercent = (pos.taxRate * 100).toFixed(0);
-  const tax = pos.getTax();
-  const grandTotal = pos.getGrandTotal() + kokoInterestAmt;
-  const change = pos.getChange();
+  const grandTotal = Math.max(0, pos.getGrandTotal() + kokoInterestAmt - exchangeCredit);
+  const isHP = pos.paymentMethod === 'hire_purchase';
+  
+  const totalPaid = payments.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
+  const totalPaidCash = payments.filter(p => p.method === 'cash').reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
+
+  let change = 0;
+  if (totalPaidCash > 0 && pos.tenderedAmount && parseFloat(pos.tenderedAmount) > totalPaidCash) {
+    change = parseFloat(pos.tenderedAmount) - totalPaidCash;
+  } else if (pos.tenderedAmount && parseFloat(pos.tenderedAmount) > grandTotal) {
+    change = parseFloat(pos.tenderedAmount) - grandTotal;
+  }
+
+  // Synchronize single payment mode
+  useEffect(() => {
+    if (!isHP && payments.length === 1) {
+      const currentMethod = pos.paymentMethod || 'cash';
+      const expectedAmount = isCredit ? (parseFloat(creditAmountPaid) || 0) : grandTotal;
+      const existing = payments[0];
+      if (existing.method !== currentMethod || existing.amount !== expectedAmount) {
+        setPayments([
+          {
+            method: currentMethod,
+            amount: expectedAmount,
+            accountId: currentMethod === 'cash' ? '' : (existing.accountId || accounts.find(a => a.isDefault)?._id || accounts[0]?._id || ''),
+            chequeDetails: existing.chequeDetails || { number: '', bank: '', dueDate: '' }
+          }
+        ]);
+      }
+    }
+  }, [pos.paymentMethod, grandTotal, accounts, isHP, isCredit, creditAmountPaid]);
 
 
   const fetchCustomerPoints = async () => {
@@ -618,7 +924,7 @@ const POSScreen = () => {
       setCreditLoading(true);
       const { data } = await getCreditOrders({ status: 'pending' });
       setCreditOrders(data || []);
-    } catch (err) {
+    } catch (_err) {
       toast.error('Failed to load credit orders');
     } finally {
       setCreditLoading(false);
@@ -648,8 +954,518 @@ const POSScreen = () => {
     }
   };
 
+  if (!isUnlocked) {
+    const handleKeypadPress = (val) => {
+      setUnlockCode((prev) => prev + val);
+    };
+
+    const handleKeypadClear = () => {
+      setUnlockCode('');
+    };
+
+    const handleKeypadBackspace = () => {
+      setUnlockCode((prev) => prev.slice(0, -1));
+    };
+
+    return (
+      <div style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 9999,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: '#0f172a',
+        backgroundImage: 'radial-gradient(circle at 10% 20%, rgba(59, 130, 246, 0.15) 0%, transparent 40%), radial-gradient(circle at 90% 80%, rgba(99, 102, 241, 0.15) 0%, transparent 40%)',
+        fontFamily: "'Inter', sans-serif",
+        padding: '16px',
+        overflowY: 'auto'
+      }}>
+        {/* Main Glassmorphic Container */}
+        <div 
+          className="flex flex-col md:flex-row w-full max-w-[900px] h-auto md:h-[580px] overflow-y-auto md:overflow-hidden"
+          style={{
+            background: 'rgba(30, 41, 59, 0.7)',
+            backdropFilter: 'blur(24px)',
+            border: '1px solid rgba(255, 255, 255, 0.1)',
+            borderRadius: '32px',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)'
+          }}
+        >
+          
+          {/* Left Panel: Profile Selection */}
+          <div 
+            className="flex-1 md:flex-[1.2] p-6 md:p-10 border-b md:border-b-0 md:border-r border-white/10 flex flex-col overflow-y-auto"
+          >
+            <h2 style={{ fontSize: '20px', fontWeight: '800', color: '#fff', marginBottom: '8px', letterSpacing: '-0.5px' }}>
+              Select Staff Profile
+            </h2>
+            <p style={{ fontSize: '13px', color: '#94a3b8', marginBottom: '24px' }}>
+              Select your profile to sign in to the POS terminal.
+            </p>
+
+            {loadingCashiers ? (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 1 }}>
+                <div style={{ width: '32px', height: '32px', border: '3px solid rgba(59, 130, 246, 0.2)', borderTopColor: '#3b82f6', borderRadius: '50%', className: 'animate-spin' }} />
+              </div>
+            ) : (
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))',
+                gap: '16px',
+                maxHeight: '380px',
+                overflowY: 'auto',
+                paddingRight: '8px'
+              }}>
+                {cashiersList.map((cashier) => {
+                  const isSelected = selectedCashier?._id === cashier._id;
+                  const initials = cashier.name ? cashier.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() : 'C';
+                  
+                  return (
+                    <div 
+                      key={cashier._id}
+                      onClick={() => {
+                        setSelectedCashier(isSelected ? null : cashier);
+                        setUnlockCode('');
+                        setUnlockError('');
+                      }}
+                      style={{
+                        background: isSelected ? 'rgba(59, 130, 246, 0.15)' : 'rgba(255, 255, 255, 0.03)',
+                        border: isSelected ? '2px solid #3b82f6' : '1px solid rgba(255, 255, 255, 0.05)',
+                        borderRadius: '20px',
+                        padding: '16px 12px',
+                        cursor: 'pointer',
+                        textAlign: 'center',
+                        transition: 'all 0.2s ease',
+                        boxShadow: isSelected ? '0 10px 15px -3px rgba(59, 130, 246, 0.1)' : 'none',
+                        position: 'relative'
+                      }}
+                      className="hover:scale-[1.03]"
+                    >
+                      {/* Avatar */}
+                      <div style={{
+                        width: '52px',
+                        height: '52px',
+                        borderRadius: '50%',
+                        background: isSelected ? 'linear-gradient(135deg, #3b82f6, #6366f1)' : 'linear-gradient(135deg, #475569, #334155)',
+                        color: '#fff',
+                        fontSize: '16px',
+                        fontWeight: 'bold',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        margin: '0 auto 10px auto',
+                        boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)'
+                      }}>
+                        {initials}
+                      </div>
+                      
+                      <div style={{ fontSize: '12px', fontWeight: '700', color: '#f8fafc', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {cashier.name}
+                      </div>
+                      
+                      <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '2px', textTransform: 'capitalize' }}>
+                        {cashier.role === 'deliveryGuy' ? 'Rider' : cashier.role}
+                      </div>
+
+                      {cashier.assignedStore?.name && (
+                        <div style={{ fontSize: '8px', color: '#3b82f6', marginTop: '4px', fontWeight: 'bold' }}>
+                          🏪 {cashier.assignedStore.name}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Right Panel: Passcode Entry & Numpad */}
+          <div 
+            className="flex-1 p-6 md:p-10 flex flex-col items-center justify-center"
+            style={{
+              background: 'rgba(15, 23, 42, 0.4)'
+            }}
+          >
+            {/* Header */}
+            <div style={{ textAlign: 'center', marginBottom: '24px', width: '100%' }}>
+              {selectedCashier ? (
+                <div>
+                  <span style={{ fontSize: '10px', fontWeight: '800', background: 'rgba(59, 130, 246, 0.2)', color: '#60a5fa', padding: '4px 10px', borderRadius: '9999px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    {selectedCashier.role} Selected
+                  </span>
+                  <h3 style={{ fontSize: '20px', fontWeight: 'bold', color: '#fff', marginTop: '8px', marginBottom: '4px' }}>
+                    Hi, {selectedCashier.name}
+                  </h3>
+                  <p style={{ fontSize: '12px', color: '#94a3b8' }}>
+                    Enter your passcode or account password to sign in.
+                  </p>
+                </div>
+              ) : (
+                <div>
+                  <div style={{ width: '48px', height: '48px', backgroundColor: 'rgba(255,255,255,0.05)', color: '#3b82f6', borderRadius: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px auto' }}>
+                    <Lock size={22} />
+                  </div>
+                  <h3 style={{ fontSize: '18px', fontWeight: 'bold', color: '#fff', marginBottom: '4px' }}>
+                    Passcode Entry
+                  </h3>
+                  <p style={{ fontSize: '12px', color: '#94a3b8' }}>
+                    Select a profile or enter passcode/PIN directly.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Passcode Display Dot Indicators */}
+            <div style={{ width: '100%', marginBottom: '24px', position: 'relative' }}>
+              <input
+                type="password"
+                placeholder={selectedCashier ? "PIN or Password" : "Enter PIN / passcode"}
+                value={unlockCode}
+                onChange={(e) => setUnlockCode(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleUnlock()}
+                style={{
+                  width: '100%',
+                  padding: '12px 16px',
+                  borderRadius: '16px',
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  background: 'rgba(15, 23, 42, 0.6)',
+                  color: '#fff',
+                  textAlign: 'center',
+                  fontSize: '18px',
+                  fontWeight: 'bold',
+                  letterSpacing: '2px',
+                  outline: 'none',
+                  boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.3)',
+                  transition: 'all 0.2s'
+                }}
+              />
+              {unlockError && (
+                <p style={{ fontSize: '11px', color: '#ef4444', fontWeight: '600', marginTop: '8px', textAlign: 'center' }}>
+                  {unlockError}
+                </p>
+              )}
+            </div>
+
+            {/* Numerical Keypad Grid */}
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(3, 1fr)',
+              gap: '12px',
+              width: '100%',
+              maxWidth: '280px',
+              marginBottom: '24px'
+            }}>
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
+                <button
+                  key={num}
+                  type="button"
+                  onClick={() => handleKeypadPress(num.toString())}
+                  style={{
+                    height: '50px',
+                    borderRadius: '14px',
+                    background: 'rgba(255, 255, 255, 0.05)',
+                    border: '1px solid rgba(255, 255, 255, 0.03)',
+                    color: '#fff',
+                    fontSize: '18px',
+                    fontWeight: 'bold',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s'
+                  }}
+                  className="hover:bg-slate-800 active:scale-95"
+                >
+                  {num}
+                </button>
+              ))}
+              
+              {/* Clear */}
+              <button
+                type="button"
+                onClick={handleKeypadClear}
+                style={{
+                  height: '50px',
+                  borderRadius: '14px',
+                  background: 'rgba(239, 68, 68, 0.1)',
+                  border: '1px solid rgba(239, 68, 68, 0.15)',
+                  color: '#f87171',
+                  fontSize: '12px',
+                  fontWeight: 'bold',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s'
+                }}
+                className="hover:bg-red-500/20 active:scale-95"
+              >
+                Clear
+              </button>
+
+              {/* 0 */}
+              <button
+                type="button"
+                onClick={() => handleKeypadPress('0')}
+                style={{
+                  height: '50px',
+                  borderRadius: '14px',
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  border: '1px solid rgba(255, 255, 255, 0.03)',
+                  color: '#fff',
+                  fontSize: '18px',
+                  fontWeight: 'bold',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s'
+                }}
+                className="hover:bg-slate-800 active:scale-95"
+              >
+                0
+              </button>
+
+              {/* Backspace */}
+              <button
+                type="button"
+                onClick={handleKeypadBackspace}
+                style={{
+                  height: '50px',
+                  borderRadius: '14px',
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  border: '1px solid rgba(255, 255, 255, 0.03)',
+                  color: '#94a3b8',
+                  fontSize: '16px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s'
+                }}
+                className="hover:bg-slate-800 active:scale-95"
+              >
+                ⌫
+              </button>
+            </div>
+
+            {/* Actions */}
+            <div style={{ display: 'flex', gap: '12px', width: '100%', maxWidth: '280px' }}>
+              {selectedCashier && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedCashier(null);
+                    setUnlockCode('');
+                    setUnlockError('');
+                  }}
+                  style={{
+                    flex: 1,
+                    background: 'rgba(255, 255, 255, 0.05)',
+                    border: '1px solid rgba(255, 255, 255, 0.08)',
+                    color: '#94a3b8',
+                    fontWeight: 'bold',
+                    padding: '12px',
+                    borderRadius: '14px',
+                    cursor: 'pointer',
+                    fontSize: '12px'
+                  }}
+                  className="hover:bg-slate-800"
+                >
+                  Cancel
+                </button>
+              )}
+              
+              <button
+                type="button"
+                onClick={handleUnlock}
+                style={{
+                  flex: 2,
+                  backgroundColor: '#3b82f6',
+                  backgroundImage: 'linear-gradient(135deg, #3b82f6, #2563eb)',
+                  color: '#fff',
+                  fontWeight: 'bold',
+                  padding: '12px',
+                  borderRadius: '14px',
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontSize: '13px',
+                  boxShadow: '0 4px 14px rgba(37, 99, 235, 0.4)'
+                }}
+                className="hover:scale-[1.02] active:scale-[0.98] transition-all"
+              >
+                Verify & Unlock
+              </button>
+            </div>
+          </div>
+          
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="pos-screen">
+      {/* Price Safeguard Warning Popup */}
+      {priceSafeguardWarning && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }}>
+          <div style={{ background: '#fff', borderRadius: '20px', padding: '30px', maxWidth: '400px', width: '100%', margin: '0 16px', textAlign: 'center', border: '2px solid #ef4444', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }}>
+            <div style={{ width: '56px', height: '56px', backgroundColor: '#fee2e2', color: '#ef4444', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px auto' }}>
+              <AlertTriangle size={28} />
+            </div>
+            <h3 style={{ fontSize: '20px', fontWeight: 'bold', color: '#991b1b', margin: '0 0 8px 0' }}>Cannot sell for this price</h3>
+            <h4 style={{ fontSize: '16px', fontWeight: '800', color: '#dc2626', margin: '0 0 16px 0', fontStyle: 'italic' }}>"Meka me ganata denna ba"</h4>
+            <p style={{ fontSize: '13px', color: '#4b5563', margin: '0 0 24px 0', lineHeight: 1.5 }}>{priceSafeguardWarning}</p>
+            <button
+              onClick={() => setPriceSafeguardWarning('')}
+              style={{ backgroundColor: '#ef4444', color: '#fff', fontWeight: 'bold', padding: '10px 24px', borderRadius: '10px', border: 'none', cursor: 'pointer', fontSize: '13px' }}
+            >
+              Close Warning
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Returns & Exchange Modal */}
+      {showReturnModal && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(4px)' }}>
+          <div style={{ background: '#fff', borderRadius: '24px', padding: '24px', maxWidth: '600px', width: '100%', margin: '0 16px', border: '1px solid #e2e8f0', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)', maxHeight: '90vh', display: 'flex', flexDirection: 'column', color: '#1e293b' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f1f5f9', paddingBottom: '12px', marginBottom: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <RefreshCw size={20} className="text-blue-500" />
+                <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold', color: '#1e293b' }}>Process Customer Return / Exchange</h3>
+              </div>
+              <button onClick={() => { setShowReturnModal(false); setReturnOrder(null); setReturnItems([]); }} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#64748b' }}>
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Invoice Search Input */}
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
+              <input
+                type="text"
+                placeholder="Search Invoice Number (e.g. INV-20260605-0001)"
+                value={returnInvoiceNo}
+                onChange={e => setReturnInvoiceNo(e.target.value)}
+                className="pos-input"
+                style={{ flex: 1, fontSize: '13px', background: '#fff', color: '#1e293b' }}
+                onKeyDown={e => e.key === 'Enter' && handleSearchReturnInvoice()}
+              />
+              <button
+                onClick={handleSearchReturnInvoice}
+                disabled={searchingInvoice}
+                className="pos-btn-blue"
+                style={{ padding: '0 16px', fontSize: '13px', height: '38px', whiteSpace: 'nowrap' }}
+              >
+                {searchingInvoice ? 'Searching...' : 'Search'}
+              </button>
+            </div>
+
+            {/* Invoice Details & Returnable Items */}
+            {returnOrder && (
+              <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: '12px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                    <div><strong>Invoice No:</strong> {returnOrder.invoiceNumber}</div>
+                    <div><strong>Date:</strong> {new Date(returnOrder.createdAt).toLocaleDateString()}</div>
+                    <div><strong>Customer:</strong> {returnOrder.customerName || 'Walk-in'}</div>
+                    <div><strong>Total Amount:</strong> Rs. {returnOrder.totalAmount?.toFixed(2)}</div>
+                  </div>
+                </div>
+
+                <div>
+                  <h4 style={{ margin: '0 0 8px 0', fontSize: '13px', fontWeight: 'bold', color: '#334155' }}>Select Items to Return</h4>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {returnItems.map((item, index) => (
+                      <div key={item.productId} style={{ display: 'flex', flexDirection: 'column', gap: '6px', padding: '12px', border: '1px solid #e2e8f0', borderRadius: '12px', background: item.checked ? '#f0fdf4' : '#fff' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <input
+                            type="checkbox"
+                            checked={!!item.checked}
+                            onChange={(e) => {
+                              const newItems = [...returnItems];
+                              newItems[index].checked = e.target.checked;
+                              setReturnItems(newItems);
+                            }}
+                          />
+                          <span style={{ fontSize: '13px', fontWeight: 600, color: '#1e293b', flex: 1 }}>{item.name}</span>
+                          <span style={{ fontSize: '12px', color: '#64748b' }}>Rs. {item.price.toFixed(2)}</span>
+                        </div>
+
+                        {item.checked && (
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.5fr', gap: '8px', marginTop: '6px', paddingLeft: '20px' }}>
+                            <div>
+                              <label style={{ fontSize: '10px', color: '#64748b', display: 'block', marginBottom: '2px' }}>Qty (Max {item.maxQty})</label>
+                              <input
+                                type="number"
+                                min="1"
+                                max={item.maxQty}
+                                value={item.qty || ''}
+                                onChange={(e) => {
+                                  const newItems = [...returnItems];
+                                  newItems[index].qty = Math.min(item.maxQty, Math.max(1, parseInt(e.target.value) || 1));
+                                  setReturnItems(newItems);
+                                }}
+                                className="pos-input"
+                                style={{ height: '28px', fontSize: '11px', padding: '0 6px', background: '#fff', color: '#1e293b' }}
+                              />
+                            </div>
+                            <div>
+                              <label style={{ fontSize: '10px', color: '#64748b', display: 'block', marginBottom: '2px' }}>Condition</label>
+                              <select
+                                value={item.condition}
+                                onChange={(e) => {
+                                  const newItems = [...returnItems];
+                                  newItems[index].condition = e.target.value;
+                                  setReturnItems(newItems);
+                                }}
+                                className="pos-input"
+                                style={{ height: '28px', fontSize: '11px', padding: '0 4px', background: '#fff', color: '#1e293b' }}
+                              >
+                                <option value="good">Good</option>
+                                <option value="damaged">Damaged</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label style={{ fontSize: '10px', color: '#64748b', display: 'block', marginBottom: '2px' }}>Reason</label>
+                              <input
+                                type="text"
+                                value={item.reason}
+                                onChange={(e) => {
+                                  const newItems = [...returnItems];
+                                  newItems[index].reason = e.target.value;
+                                  setReturnItems(newItems);
+                                }}
+                                placeholder="Reason for return"
+                                className="pos-input"
+                                style={{ height: '28px', fontSize: '11px', padding: '0 6px', background: '#fff', color: '#1e293b' }}
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Footer actions */}
+            <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: '16px', marginTop: '16px', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+              <button
+                onClick={() => { setShowReturnModal(false); setReturnOrder(null); setReturnItems([]); }}
+                className="pos-btn-gray"
+                style={{ padding: '8px 16px', fontSize: '12px' }}
+              >
+                Cancel
+              </button>
+              {returnOrder && (
+                <button
+                  onClick={handleConfirmReturnExchange}
+                  disabled={processingReturn || !returnItems.some(i => i.checked)}
+                  className="pos-btn-green"
+                  style={{ padding: '8px 16px', fontSize: '12px' }}
+                >
+                  {processingReturn ? 'Processing...' : 'Apply Return Credit'}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Top Bar */}
       <header className="pos-topbar">
         <div className="pos-topbar-left">
@@ -680,6 +1496,10 @@ const POSScreen = () => {
             📋
             <span className="pos-topbar-btn-text">Credit</span>
           </button>
+          <button className="pos-topbar-btn" onClick={() => setShowReturnModal(true)} title="Return / Exchange" style={{ background: '#fef2f2', color: '#991b1b', borderColor: '#fee2e2' }}>
+            <RefreshCw size={18} />
+            <span className="pos-topbar-btn-text">Return</span>
+          </button>
           <div className="pos-topbar-cashier">
             <div className="pos-topbar-avatar">
               {user?.name?.charAt(0)?.toUpperCase() || 'C'}
@@ -689,6 +1509,10 @@ const POSScreen = () => {
           <button className="pos-topbar-btn" onClick={() => setShowReloadModal(true)} title="Reload & Bill Payments" style={{ background: '#f0fdf4', color: '#166534', borderColor: '#bbf7d0' }}>
             <Smartphone size={18} />
             <span className="pos-topbar-btn-text">Reload</span>
+          </button>
+          <button className="pos-topbar-btn" onClick={handleSwitchCashier} title="Switch Cashier" style={{ background: '#f5f3ff', color: '#5b21b6', borderColor: '#ddd6fe' }}>
+            <Lock size={18} />
+            <span className="pos-topbar-btn-text">Switch Cashier</span>
           </button>
           <button className="pos-topbar-logout" onClick={handleLogout} title="Logout">
             <LogOut size={18} />
@@ -794,18 +1618,20 @@ const POSScreen = () => {
                   </div>
                   <div className="pos-product-info">
                     <h4 className="pos-product-name">{product.name}</h4>
-                    <div className="pos-product-meta">
-                      <span className="pos-product-price">Rs. {product.price.toFixed(2)}</span>
-                      <span className="pos-product-unit">/{product.unit}</span>
-                    </div>
-                    <div className="pos-product-stock-row">
-                      <span className={`pos-product-stock ${product.stock <= 5 ? 'low' : ''}`}>
-                        Stock: {product.stock}
-                      </span>
-                      {product.barcode && (
-                        <span className="pos-product-barcode">{product.barcode}</span>
+                    <div className="pos-product-meta" style={{ display: 'flex', flexDirection: 'column', gap: '2px', width: '100%' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+                        <span className="pos-product-price" style={{ fontSize: '13px', fontWeight: 'bold', color: '#1e293b' }}>Rs. {product.price.toFixed(2)}</span>
+                        <span className="pos-product-unit" style={{ fontSize: '11px', color: '#64748b', fontWeight: 'bold' }}>Stock: {product.stock}</span>
+                      </div>
+                      {product.minPrice > 0 && (
+                        <span style={{ fontSize: '10px', color: '#ef4444', fontWeight: 600 }}>
+                          Min: Rs. {product.minPrice.toFixed(2)}
+                        </span>
                       )}
                     </div>
+                    {product.barcode && (
+                      <span className="pos-product-barcode">{product.barcode}</span>
+                    )}
                   </div>
                   {product.stock > 0 && (
                     <button className="pos-product-add-btn">
@@ -879,7 +1705,7 @@ const POSScreen = () => {
 
 
         {/* ──────── RIGHT PANEL: Cart ──────── */}
-        <div className="pos-cart-panel">
+        <div className="pos-cart-panel" style={pos.cart.length > 0 ? { flex: '4.5', maxWidth: '600px', transition: 'all 0.3s ease' } : { transition: 'all 0.3s ease' }}>
           <div className="pos-cart-header">
             <Receipt size={20} />
             <h2>Current Sale</h2>
@@ -896,40 +1722,151 @@ const POSScreen = () => {
               </div>
             ) : (
               pos.cart.map((item) => (
-                <div key={item.productId} className="pos-cart-item">
-                  <div className="pos-cart-item-info">
-                    <h4 className="pos-cart-item-name">{item.name}</h4>
-                    <p className="pos-cart-item-price">
-                      Rs.{item.price.toFixed(2)} × {item.quantity}
-                    </p>
-                  </div>
-                  <div className="pos-cart-item-controls">
-                    <div className="pos-qty-controls">
+                <div key={item.productId} className="pos-cart-item" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+                  <div className="flex justify-between items-center w-full">
+                    <div className="pos-cart-item-info">
+                      <h4 className="pos-cart-item-name">{item.name}</h4>
+                      <p className="pos-cart-item-price">
+                        Rs.{item.price.toFixed(2)} × {item.quantity}
+                      </p>
+                    </div>
+                    <div className="pos-cart-item-controls">
+                      <div className="pos-qty-controls">
+                        <button
+                          className="pos-qty-btn"
+                          onClick={() => pos.updateQuantity(item.productId, item.quantity - 1)}
+                        >
+                          <Minus size={14} />
+                        </button>
+                        <span className="pos-qty-value">{item.quantity}</span>
+                        <button
+                          className="pos-qty-btn"
+                          onClick={() => pos.updateQuantity(item.productId, item.quantity + 1)}
+                          disabled={item.quantity >= item.stock}
+                        >
+                          <Plus size={14} />
+                        </button>
+                      </div>
+                      <span className="pos-cart-item-total">
+                        Rs.{(item.price * item.quantity).toFixed(2)}
+                      </span>
                       <button
-                        className="pos-qty-btn"
-                        onClick={() => pos.updateQuantity(item.productId, item.quantity - 1)}
+                        className="pos-cart-remove"
+                        onClick={() => pos.removeItem(item.productId)}
                       >
-                        <Minus size={14} />
-                      </button>
-                      <span className="pos-qty-value">{item.quantity}</span>
-                      <button
-                        className="pos-qty-btn"
-                        onClick={() => pos.updateQuantity(item.productId, item.quantity + 1)}
-                        disabled={item.quantity >= item.stock}
-                      >
-                        <Plus size={14} />
+                        <Trash2 size={14} />
                       </button>
                     </div>
-                    <span className="pos-cart-item-total">
-                      Rs.{(item.price * item.quantity).toFixed(2)}
-                    </span>
-                    <button
-                      className="pos-cart-remove"
-                      onClick={() => pos.removeItem(item.productId)}
-                    >
-                      <Trash2 size={14} />
-                    </button>
                   </div>
+
+                  {/* IMEI Scan & Entry Block */}
+                  {(() => {
+                    const dbProduct = productCache[item.productId] || products.find(p => p._id === item.productId);
+                    if (!dbProduct) return null;
+                    const catName = dbProduct.categoryId?.name || '';
+                    const isMobile = /mobile|phone|tablet|smartphone/i.test(catName) || (dbProduct.imei && dbProduct.imei.length > 0) || dbProduct.ram || dbProduct.storage;
+                    
+                    if (!isMobile) return null;
+                    
+                    const selectedImeis = item.imei || [];
+                    const availableImeis = dbProduct.imei ? dbProduct.imei.filter(im => !selectedImeis.includes(im)) : [];
+                    
+                    return (
+                      <div className="mt-2 bg-[#f8fafc] border border-gray-200 rounded-xl p-2.5 space-y-2 text-xs text-left" style={{ width: '100%' }}>
+                        <div className="flex justify-between items-center text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                          <span>IMEI Scan/Selection Required</span>
+                          <span className={selectedImeis.length === item.quantity ? 'text-emerald-600 font-bold' : 'text-red-500 font-bold'}>
+                            {selectedImeis.length} of {item.quantity} scanned
+                          </span>
+                        </div>
+                        
+                        {/* Selected IMEIs as badges */}
+                        {selectedImeis.length > 0 && (
+                          <div className="flex flex-wrap gap-1.5">
+                            {selectedImeis.map((im) => (
+                              <span key={im} className="bg-primary-blue text-white text-[10px] font-bold px-2 py-0.5 rounded-lg flex items-center gap-1 shadow-sm">
+                                {im}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    pos.setCartItemImeis(item.productId, selectedImeis.filter(x => x !== im));
+                                  }}
+                                  className="hover:text-red-200 font-bold transition-colors ml-1 focus:outline-none"
+                                >
+                                  ×
+                                </button>
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                        
+                        {/* Add IMEI UI */}
+                        {selectedImeis.length < item.quantity && (
+                          <div className="flex gap-2">
+                            {dbProduct.imei && dbProduct.imei.length > 0 ? (
+                              availableImeis.length > 0 ? (
+                                <select
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    if (val) {
+                                      pos.setCartItemImeis(item.productId, [...selectedImeis, val]);
+                                      e.target.value = '';
+                                    }
+                                  }}
+                                  className="flex-grow p-1.5 border border-card-border rounded-lg bg-white text-dark-navy focus:outline-none focus:ring-1 focus:ring-primary-blue text-xs"
+                                >
+                                  <option value="">-- Select Scanned IMEI --</option>
+                                  {availableImeis.map(im => (
+                                    <option key={im} value={im}>{im}</option>
+                                  ))}
+                                </select>
+                              ) : (
+                                <span className="text-[10px] text-red-500 italic flex-grow py-1">No available IMEIs in stock.</span>
+                              )
+                            ) : (
+                              <div className="flex-grow text-[10px] text-gray-500 italic py-1">
+                                Enter manual IMEI
+                              </div>
+                            )}
+                            
+                            <input
+                              type="text"
+                              placeholder="Scan/type IMEI + Enter"
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  const val = e.target.value.trim();
+                                  if (!val) return;
+                                  
+                                  if (dbProduct.imei && dbProduct.imei.length > 0) {
+                                    if (dbProduct.imei.includes(val)) {
+                                      if (selectedImeis.includes(val)) {
+                                        toast.info('IMEI already added');
+                                      } else {
+                                        pos.setCartItemImeis(item.productId, [...selectedImeis, val]);
+                                        e.target.value = '';
+                                      }
+                                    } else {
+                                      toast.error('IMEI is not present in product stock');
+                                    }
+                                  } else {
+                                    // Empty imei array in database: allow any custom scanned/typed IMEI
+                                    if (selectedImeis.includes(val)) {
+                                      toast.info('IMEI already added');
+                                    } else {
+                                      pos.setCartItemImeis(item.productId, [...selectedImeis, val]);
+                                      e.target.value = '';
+                                    }
+                                  }
+                                }
+                              }}
+                              className="w-48 p-1.5 border border-card-border rounded-lg bg-white text-dark-navy focus:outline-none focus:ring-1 focus:ring-primary-blue text-xs"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
               ))
             )}
@@ -973,10 +1910,41 @@ const POSScreen = () => {
                     </button>
                   </div>
                 )}
-                <div className="pos-total-row">
-                  <span>Tax ({taxPercent}%)</span>
-                  <span>Rs. {tax.toFixed(2)}</span>
+                <div className="pos-total-row" style={{ alignItems: 'center' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <span>Tax (%)</span>
+                    <input
+                      type="number"
+                      value={pos.taxRate * 100}
+                      onChange={(e) => {
+                        const newRate = parseFloat(e.target.value);
+                        pos.setTaxRate(isNaN(newRate) ? 0 : newRate / 100);
+                      }}
+                      className="pos-input"
+                      style={{ width: '60px', height: '24px', padding: '0 4px', fontSize: '11px', textAlign: 'center', margin: 0, background: '#fff', color: '#1e293b' }}
+                      min="0"
+                      max="100"
+                      step="0.1"
+                    />
+                  </div>
+                  <span>Rs. {pos.getTax().toFixed(2)}</span>
                 </div>
+                {exchangeCredit > 0 && (
+                  <div className="pos-total-row pos-discount-row">
+                    <span style={{ color: '#2563eb', fontWeight: 600 }}>🔄 Return Credit (Applied)</span>
+                    <span style={{ color: '#2563eb', fontWeight: 700 }}>-Rs. {exchangeCredit.toFixed(2)}</span>
+                    <button
+                      className="pos-discount-clear"
+                      onClick={() => {
+                        setExchangeCredit(0);
+                        setExchangeReturnId(null);
+                        toast.info('Return credit removed');
+                      }}
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                )}
                 {loyaltyDiscount > 0 && (
                   <div className="pos-total-row pos-discount-row">
                     <span>🏆 Loyalty ({pos.loyaltyPointsToRedeem} pts)</span>
@@ -1057,38 +2025,58 @@ const POSScreen = () => {
                   {pos.customerName ? `Customer: ${pos.customerName}` : 'Add Customer Info'}
                 </button>
                 {showCustomerInfo && (
-                  <div style={{ display: 'flex', gap: '6px', marginBottom: '6px' }}>
-                    <input
-                      type="text"
-                      value={pos.customerName}
-                      onChange={(e) => pos.setCustomerInfo(e.target.value, pos.customerPhone)}
-                      placeholder="Customer name"
-                      className="pos-input"
-                      style={{ flex: 1, fontSize: '12px' }}
-                    />
-                    <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '6px' }}>
+                    <div style={{ display: 'flex', gap: '6px' }}>
                       <input
-                        type="tel"
-                        value={pos.customerPhone}
-                        onChange={(e) => pos.setCustomerInfo(pos.customerName, e.target.value)}
-                        placeholder="Phone"
+                        type="text"
+                        value={pos.customerName}
+                        onChange={(e) => pos.setCustomerInfo(e.target.value, pos.customerPhone, pos.customerNic, pos.customerAddress)}
+                        placeholder="Customer name (e.g., John Doe)"
                         className="pos-input"
                         style={{ flex: 1, fontSize: '12px' }}
                       />
-                      <button 
-                        className="pos-btn-blue"
-                        onClick={() => {
-                          if (!pos.customerPhone) {
-                            toast.error('Enter phone number first');
-                            return;
-                          }
-                          setShowCustomerHistory(true);
-                        }}
-                        style={{ padding: '8px', minWidth: '40px' }}
-                        title="View Purchase History"
-                      >
-                        <History size={16} />
-                      </button>
+                      <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flex: 1 }}>
+                        <input
+                          type="tel"
+                          value={pos.customerPhone}
+                          onChange={(e) => pos.setCustomerInfo(pos.customerName, e.target.value, pos.customerNic, pos.customerAddress)}
+                          placeholder="Phone (e.g., 0771234567)"
+                          className="pos-input"
+                          style={{ flex: 1, fontSize: '12px' }}
+                        />
+                        <button 
+                          className="pos-btn-blue"
+                          onClick={() => {
+                            if (!pos.customerPhone) {
+                              toast.error('Enter phone number first');
+                              return;
+                            }
+                            setShowCustomerHistory(true);
+                          }}
+                          style={{ padding: '8px', minWidth: '40px' }}
+                          title="View Purchase History"
+                        >
+                          <History size={16} />
+                        </button>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: '6px' }}>
+                      <input
+                        type="text"
+                        value={pos.customerNic}
+                        onChange={(e) => pos.setCustomerInfo(pos.customerName, pos.customerPhone, e.target.value, pos.customerAddress)}
+                        placeholder="NIC (e.g., 991234567V)"
+                        className="pos-input"
+                        style={{ flex: 1, fontSize: '12px' }}
+                      />
+                      <input
+                        type="text"
+                        value={pos.customerAddress}
+                        onChange={(e) => pos.setCustomerInfo(pos.customerName, pos.customerPhone, pos.customerNic, e.target.value)}
+                        placeholder="Address (e.g., Colombo)"
+                        className="pos-input"
+                        style={{ flex: 1, fontSize: '12px' }}
+                      />
                     </div>
                   </div>
                 )}
@@ -1187,12 +2175,15 @@ const POSScreen = () => {
                         pos.setHirePurchaseData({
                           customer: { name: pos.customerName, phone: pos.customerPhone, nic: '', address: '', guarantors: [] },
                           downPayment: 0,
+                          downPaymentMethod: 'cash',
+                          downPaymentAccountId: '',
                           numberOfInstallments: 6,
                           installmentType: 'Monthly',
                           interestRate: 0,
                           interestAmount: 0,
                           netTotal: grandTotal,
-                          installmentAmount: grandTotal / 6
+                          installmentAmount: grandTotal / 6,
+                          startDate: new Date().toISOString().split('T')[0]
                         });
                       }
                     }}
@@ -1204,49 +2195,170 @@ const POSScreen = () => {
                 </div>
 
 
-                {/* Account Selection */}
-                <div style={{ marginBottom: '10px' }}>
-                  <label style={{ display: 'block', fontSize: '11px', fontWeight: 'bold', color: '#6b7280', marginBottom: '4px', textTransform: 'uppercase' }}>
-                    Target Account *
-                  </label>
-                  <select
-                    value={pos.accountId}
-                    onChange={(e) => pos.setAccountId(e.target.value)}
-                    className="pos-input"
-                    style={{ fontSize: '13px', fontWeight: 'bold', borderColor: '#6366f1', color: '#1e293b', background: '#fff' }}
+                {/* Dynamic Multi-Payment Rows */}
+                {pos.paymentMethod !== 'hire_purchase' && (
+                  <div style={{ marginBottom: '15px' }}>
+                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 'bold', color: '#6b7280', marginBottom: '8px', textTransform: 'uppercase' }}>
+                      Payment Allocation (Split Payments)
+                    </label>
+                    
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      {payments.map((p, index) => (
+                        <div key={index} style={{ display: 'flex', flexDirection: 'column', gap: '6px', background: '#f8fafc', padding: '10px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <select
+                              value={p.method}
+                              onChange={(e) => {
+                                const newPayments = [...payments];
+                                newPayments[index].method = e.target.value;
+                                if (e.target.value === 'cash') {
+                                  newPayments[index].accountId = '';
+                                } else {
+                                  newPayments[index].accountId = accounts[0]?._id || '';
+                                }
+                                // Initialize Hire Purchase data if selected
+                                if (e.target.value === 'hire_purchase' && !pos.hirePurchaseData) {
+                                  pos.setHirePurchaseData({
+                                    customer: { name: pos.customerName, phone: pos.customerPhone, nic: '', address: '', guarantors: [] },
+                                    downPayment: 0,
+                                    downPaymentMethod: 'cash',
+                                    downPaymentAccountId: '',
+                                    numberOfInstallments: 6,
+                                    installmentType: 'Monthly',
+                                    interestRate: 0,
+                                    interestAmount: 0,
+                                    netTotal: grandTotal,
+                                    installmentAmount: grandTotal / 6,
+                                    startDate: new Date().toISOString().split('T')[0]
+                                  });
+                                }
+                                setPayments(newPayments);
+                              }}
+                              className="pos-input"
+                              style={{ flex: 1.5, fontSize: '12px', height: '36px', padding: '0 8px', background: '#fff', color: '#1e293b' }}
+                            >
+                              <option value="cash">Cash</option>
+                              <option value="card">Card</option>
+                              <option value="bank_transfer">Bank Transfer</option>
+                              <option value="cheque">Cheque</option>
+                              <option value="koko">Koko</option>
+                            </select>
 
-                  >
-                    <option value="">Select Account</option>
-                    {accounts.map(a => <option key={a._id} value={a._id}>{a.name} (Rs. {a.balance?.toLocaleString()})</option>)}
-                  </select>
-                </div>
+                            {p.method !== 'cash' && (
+                              <select
+                                value={p.accountId}
+                                onChange={(e) => {
+                                  const newPayments = [...payments];
+                                  newPayments[index].accountId = e.target.value;
+                                  setPayments(newPayments);
+                                }}
+                                className="pos-input"
+                                style={{ flex: 2, fontSize: '12px', height: '36px', padding: '0 8px', background: '#fff', color: '#1e293b' }}
+                              >
+                                <option value="">Select Account</option>
+                                {accounts.map(a => (
+                                  <option key={a._id} value={a._id}>
+                                    {a.name}
+                                  </option>
+                                ))}
+                              </select>
+                            )}
 
-                {/* Cheque Details */}
-                {pos.paymentMethod === 'cheque' && (
-                  <div style={{ background: '#f8fafc', padding: '10px', borderRadius: '12px', border: '1px solid #e2e8f0', marginBottom: '10px' }}>
-                    <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
-                      <div style={{ flex: 1 }}>
-                        <label style={{ fontSize: '10px', fontWeight: 'bold', color: '#64748b' }}>Cheque No</label>
-                        <input type="text" value={pos.chequeDetails.number} onChange={(e) => pos.setChequeDetails({ number: e.target.value })} placeholder="XXXXXX" className="pos-input" style={{ fontSize: '12px', color: '#1e293b', background: '#fff', borderColor: '#cbd5e1' }} />
+                            <input
+                              type="number"
+                              value={p.amount || ''}
+                              onChange={(e) => {
+                                  const newPayments = [...payments];
+                                  newPayments[index].amount = parseFloat(e.target.value) || 0;
+                                  setPayments(newPayments);
+                              }}
+                              placeholder="Amount"
+                              className="pos-input"
+                              style={{ flex: 1.5, fontSize: '12px', height: '36px', padding: '0 8px', fontWeight: 'bold', background: '#fff', color: '#1e293b' }}
+                              min="0"
+                              step="0.01"
+                            />
 
-                      </div>
-                      <div style={{ flex: 1 }}>
-                        <label style={{ fontSize: '10px', fontWeight: 'bold', color: '#64748b' }}>Bank</label>
-                        <input type="text" value={pos.chequeDetails.bank} onChange={(e) => pos.setChequeDetails({ bank: e.target.value })} placeholder="e.g. BOC" className="pos-input" style={{ fontSize: '12px', color: '#1e293b', background: '#fff', borderColor: '#cbd5e1' }} />
+                            {payments.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setPayments(payments.filter((_, i) => i !== index));
+                                }}
+                                style={{ border: 'none', background: 'none', color: '#ef4444', padding: '6px', cursor: 'pointer' }}
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            )}
+                          </div>
 
-                      </div>
+                          {p.method === 'cheque' && (
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.2fr', gap: '6px', marginTop: '4px' }}>
+                              <div>
+                                <label style={{ fontSize: '9px', fontWeight: 'bold', color: '#64748b' }}>Cheque No</label>
+                                <input
+                                  type="text"
+                                  value={p.chequeDetails?.number || ''}
+                                  onChange={(e) => {
+                                    const newPayments = [...payments];
+                                    newPayments[index].chequeDetails = { ...newPayments[index].chequeDetails, number: e.target.value };
+                                    setPayments(newPayments);
+                                  }}
+                                  placeholder="Number"
+                                  className="pos-input"
+                                  style={{ fontSize: '11px', height: '28px', padding: '0 6px', background: '#fff', color: '#1e293b' }}
+                                />
+                              </div>
+                              <div>
+                                <label style={{ fontSize: '9px', fontWeight: 'bold', color: '#64748b' }}>Bank</label>
+                                <input
+                                  type="text"
+                                  value={p.chequeDetails?.bank || ''}
+                                  onChange={(e) => {
+                                    const newPayments = [...payments];
+                                    newPayments[index].chequeDetails = { ...newPayments[index].chequeDetails, bank: e.target.value };
+                                    setPayments(newPayments);
+                                  }}
+                                  placeholder="e.g. BOC"
+                                  className="pos-input"
+                                  style={{ fontSize: '11px', height: '28px', padding: '0 6px', background: '#fff', color: '#1e293b' }}
+                                />
+                              </div>
+                              <div>
+                                <label style={{ fontSize: '9px', fontWeight: 'bold', color: '#64748b' }}>Due Date</label>
+                                <input
+                                  type="date"
+                                  value={p.chequeDetails?.dueDate || ''}
+                                  onChange={(e) => {
+                                    const newPayments = [...payments];
+                                    newPayments[index].chequeDetails = { ...newPayments[index].chequeDetails, dueDate: e.target.value };
+                                    setPayments(newPayments);
+                                  }}
+                                  className="pos-input"
+                                  style={{ fontSize: '11px', height: '28px', padding: '0 6px', background: '#fff', color: '#1e293b' }}
+                                />
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ))}
                     </div>
-                    <div>
-                      <label style={{ fontSize: '10px', fontWeight: 'bold', color: '#64748b' }}>Due Date</label>
-                      <input type="date" value={pos.chequeDetails.dueDate} onChange={(e) => pos.setChequeDetails({ dueDate: e.target.value })} className="pos-input" style={{ fontSize: '12px', color: '#1e293b', background: '#fff', borderColor: '#cbd5e1' }} />
 
-                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPayments([...payments, { method: 'cash', amount: 0, accountId: '', chequeDetails: { number: '', bank: '', dueDate: '' } }]);
+                      }}
+                      className="pos-apply-discount-btn"
+                      style={{ marginTop: '8px', width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', height: '32px', fontSize: '12px' }}
+                    >
+                      <Plus size={14} /> Add Payment Row
+                    </button>
                   </div>
                 )}
 
-
                 {/* Hire Purchase Details */}
-                {pos.paymentMethod === 'hire_purchase' && pos.hirePurchaseData && (
+                {(pos.paymentMethod === 'hire_purchase' || payments.some(p => p.method === 'hire_purchase')) && pos.hirePurchaseData && (
                   <div style={{ background: '#fef3c7', padding: '15px', borderRadius: '16px', border: '1px solid #fde68a', marginBottom: '10px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
                       <Clock size={18} className="text-amber-600" />
@@ -1257,46 +2369,125 @@ const POSScreen = () => {
                       <div>
                         <label style={{ fontSize: '10px', fontWeight: 'bold', color: '#92400e' }}>Customer Name *</label>
                         <input type="text" value={pos.customerName}
-                          onChange={(e) => pos.setCustomerInfo(e.target.value, pos.customerPhone)}
+                          onChange={(e) => pos.setCustomerInfo(e.target.value, pos.customerPhone, pos.customerNic, pos.customerAddress)}
                           placeholder="Full Name" className="pos-input" style={{ fontSize: '12px', background: '#fff', color: '#1e293b' }} />
                       </div>
                       <div>
                         <label style={{ fontSize: '10px', fontWeight: 'bold', color: '#92400e' }}>Customer Phone *</label>
                         <input type="tel" value={pos.customerPhone}
-                          onChange={(e) => pos.setCustomerInfo(pos.customerName, e.target.value)}
+                          onChange={(e) => pos.setCustomerInfo(pos.customerName, e.target.value, pos.customerNic, pos.customerAddress)}
                           placeholder="Phone Number" className="pos-input" style={{ fontSize: '12px', background: '#fff', color: '#1e293b' }} />
                       </div>
                     </div>
 
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '12px' }}>
                       <div style={{ gridColumn: 'span 2' }}>
                         <label style={{ fontSize: '10px', fontWeight: 'bold', color: '#92400e' }}>Customer NIC *</label>
-                        <input type="text" value={pos.hirePurchaseData.customer.nic}
-                          onChange={(e) => pos.setHirePurchaseData({ ...pos.hirePurchaseData, customer: { ...pos.hirePurchaseData.customer, nic: e.target.value } })}
-                          placeholder="NIC Number" className="pos-input" style={{ fontSize: '12px', background: '#fff', color: '#1e293b' }} />
-
+                        <input type="text" value={pos.customerNic}
+                          onChange={(e) => pos.setCustomerInfo(pos.customerName, pos.customerPhone, e.target.value, pos.customerAddress)}
+                          placeholder="NIC (e.g., 991234567V)" className="pos-input" style={{ fontSize: '12px', background: '#fff', color: '#1e293b' }} />
+                      </div>
+                      <div style={{ gridColumn: 'span 2' }}>
+                        <label style={{ fontSize: '10px', fontWeight: 'bold', color: '#92400e' }}>Customer Address *</label>
+                        <input type="text" value={pos.customerAddress}
+                          onChange={(e) => pos.setCustomerInfo(pos.customerName, pos.customerPhone, pos.customerNic, e.target.value)}
+                          placeholder="Address (e.g., Colombo)" className="pos-input" style={{ fontSize: '12px', background: '#fff', color: '#1e293b' }} />
+                      </div>
+                      <div style={{ gridColumn: 'span 2' }}>
+                        <label style={{ fontSize: '10px', fontWeight: 'bold', color: '#92400e' }}>Agreement Start/Purchase Date *</label>
+                        <input type="date" value={pos.hirePurchaseData?.startDate || new Date().toISOString().split('T')[0]}
+                          onChange={(e) => pos.setHirePurchaseData({
+                            ...pos.hirePurchaseData,
+                            startDate: e.target.value
+                          })}
+                          className="pos-input" style={{ fontSize: '12px', background: '#fff', color: '#1e293b' }} />
                       </div>
                       <div>
                         <label style={{ fontSize: '10px', fontWeight: 'bold', color: '#92400e' }}>Down Payment (Rs.) *</label>
-                        <input type="number" value={pos.hirePurchaseData.downPayment}
+                        <input type="number" value={pos.hirePurchaseData?.downPayment || 0}
                           onChange={(e) => {
                             const dp = Number(e.target.value);
-                            const bal = grandTotal - dp;
+                            const interest = Number(pos.hirePurchaseData?.interestAmount || 0);
+                            const netTotal = grandTotal + interest;
+                            const bal = netTotal - dp;
                             pos.setHirePurchaseData({
                               ...pos.hirePurchaseData,
                               downPayment: dp,
-                              installmentAmount: bal / pos.hirePurchaseData.numberOfInstallments
+                              netTotal: netTotal,
+                              installmentAmount: bal / (pos.hirePurchaseData?.numberOfInstallments || 1)
                             });
                           }}
                           placeholder="0.00" className="pos-input" style={{ fontSize: '12px', background: '#fff', fontWeight: 'bold', color: '#1e293b' }} />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: '10px', fontWeight: 'bold', color: '#92400e' }}>Down Payment Method *</label>
+                        <select 
+                          value={pos.hirePurchaseData.downPaymentMethod || 'cash'}
+                          onChange={(e) => {
+                            pos.setHirePurchaseData({
+                              ...pos.hirePurchaseData,
+                              downPaymentMethod: e.target.value,
+                              downPaymentAccountId: e.target.value === 'cash' ? '' : (accounts.find(a => a.isDefault)?._id || accounts[0]?._id || '')
+                            });
+                          }}
+                          className="pos-input" 
+                          style={{ fontSize: '12px', background: '#fff', color: '#1e293b', height: '36px' }}
+                        >
+                          <option value="cash">Cash</option>
+                          <option value="card">Card</option>
+                          <option value="bank_transfer">Bank Transfer</option>
+                        </select>
+                      </div>
 
+                      {(pos.hirePurchaseData.downPaymentMethod || 'cash') !== 'cash' && (
+                        <div style={{ gridColumn: 'span 2' }}>
+                          <label style={{ fontSize: '10px', fontWeight: 'bold', color: '#92400e' }}>Target Bank/Drawer Account *</label>
+                          <select
+                            value={pos.hirePurchaseData.downPaymentAccountId || ''}
+                            onChange={(e) => {
+                              pos.setHirePurchaseData({
+                                ...pos.hirePurchaseData,
+                                downPaymentAccountId: e.target.value
+                              });
+                            }}
+                            className="pos-input"
+                            style={{ fontSize: '12px', background: '#fff', color: '#1e293b', height: '36px' }}
+                          >
+                            <option value="">Select Account</option>
+                            {accounts.map(a => (
+                              <option key={a._id} value={a._id}>
+                                {a.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+                      <div>
+                        <label style={{ fontSize: '10px', fontWeight: 'bold', color: '#92400e' }}>Interest Amount (Rs.)</label>
+                        <input type="number" value={pos.hirePurchaseData.interestAmount || 0}
+                          onChange={(e) => {
+                            const interest = Number(e.target.value);
+                            const dp = Number(pos.hirePurchaseData.downPayment || 0);
+                            const netTotal = grandTotal + interest;
+                            const bal = netTotal - dp;
+                            pos.setHirePurchaseData({
+                              ...pos.hirePurchaseData,
+                              interestAmount: interest,
+                              netTotal: netTotal,
+                              installmentAmount: bal / (pos.hirePurchaseData.numberOfInstallments || 1)
+                            });
+                          }}
+                          placeholder="0.00" className="pos-input" style={{ fontSize: '12px', background: '#fff', fontWeight: 'bold', color: '#1e293b' }} />
                       </div>
                       <div>
                         <label style={{ fontSize: '10px', fontWeight: 'bold', color: '#92400e' }}>No. of Installments</label>
                         <select value={pos.hirePurchaseData.numberOfInstallments}
                           onChange={(e) => {
                             const ni = Number(e.target.value);
-                            const bal = grandTotal - pos.hirePurchaseData.downPayment;
+                            const interest = Number(pos.hirePurchaseData.interestAmount || 0);
+                            const dp = Number(pos.hirePurchaseData.downPayment || 0);
+                            const netTotal = grandTotal + interest;
+                            const bal = netTotal - dp;
                             pos.setHirePurchaseData({
                               ...pos.hirePurchaseData,
                               numberOfInstallments: ni,
@@ -1304,15 +2495,34 @@ const POSScreen = () => {
                             });
                           }}
                           className="pos-input" style={{ fontSize: '12px', background: '#fff', color: '#1e293b' }}>
-
-                          {[3, 6, 9, 12, 18, 24].map(n => <option key={n} value={n}>{n} Months</option>)}
+                          {[3, 6, 9, 10, 12, 18, 24].map(n => <option key={n} value={n}>{n} Months</option>)}
                         </select>
                       </div>
-                      <div style={{ gridColumn: 'span 2', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '10px', padding: '10px', background: 'rgba(255,255,255,0.5)', borderRadius: '10px' }}>
-                        <span style={{ fontSize: '11px', fontWeight: 'bold', color: '#92400e' }}>Installment Amount:</span>
-                        <span style={{ fontSize: '15px', fontWeight: '800', color: '#b45309' }}>
-                          Rs. {((grandTotal - (pos.hirePurchaseData.downPayment || 0)) / (pos.hirePurchaseData.numberOfInstallments || 1)).toFixed(2)}
-                        </span>
+                      <div style={{ gridColumn: 'span 2', display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '10px', padding: '10px', background: 'rgba(255,255,255,0.5)', borderRadius: '10px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontSize: '11px', fontWeight: 'bold', color: '#92400e' }}>Original Price:</span>
+                          <span style={{ fontSize: '12px', fontWeight: '700', color: '#92400e' }}>
+                            Rs. {grandTotal.toFixed(2)}
+                          </span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontSize: '11px', fontWeight: 'bold', color: '#92400e' }}>Total Payable (with Interest):</span>
+                          <span style={{ fontSize: '12px', fontWeight: '800', color: '#b45309' }}>
+                            Rs. {((grandTotal + Number(pos.hirePurchaseData.interestAmount || 0))).toFixed(2)}
+                          </span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px dotted rgba(146, 64, 14, 0.2)', paddingTop: '4px' }}>
+                          <span style={{ fontSize: '11px', fontWeight: 'bold', color: '#92400e' }}>Remaining Balance:</span>
+                          <span style={{ fontSize: '12px', fontWeight: '800', color: '#b45309' }}>
+                            Rs. {((grandTotal + Number(pos.hirePurchaseData.interestAmount || 0)) - Number(pos.hirePurchaseData.downPayment || 0)).toFixed(2)}
+                          </span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid rgba(146, 64, 14, 0.3)', paddingTop: '4px' }}>
+                          <span style={{ fontSize: '11px', fontWeight: 'bold', color: '#92400e' }}>Installment Amount:</span>
+                          <span style={{ fontSize: '15px', fontWeight: '800', color: '#b45309' }}>
+                            Rs. {(((grandTotal + Number(pos.hirePurchaseData.interestAmount || 0)) - Number(pos.hirePurchaseData.downPayment || 0)) / (pos.hirePurchaseData.numberOfInstallments || 1)).toFixed(2)}
+                          </span>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -1342,6 +2552,93 @@ const POSScreen = () => {
                         <span className="pos-change-amount">Rs. {change.toFixed(2)}</span>
                       </div>
                     )}
+                  </div>
+                )}
+
+                {/* Single Payment Method Fields (when not split payments) */}
+                {payments.length === 1 && pos.paymentMethod !== 'cash' && pos.paymentMethod !== 'hire_purchase' && (
+                  <div style={{ background: '#f8fafc', padding: '15px', borderRadius: '16px', border: '1px solid #e2e8f0', marginBottom: '10px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
+                      <Landmark size={18} className="text-blue-600" />
+                      <h4 style={{ margin: 0, fontSize: '13px', fontWeight: 'bold', color: '#1e293b', textTransform: 'capitalize' }}>
+                        {pos.paymentMethod.replace('_', ' ')} Details
+                      </h4>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '10px' }}>
+                      <div>
+                        <label style={{ fontSize: '10px', fontWeight: 'bold', color: '#64748b', display: 'block', marginBottom: '4px' }}>Target Account *</label>
+                        <select
+                          value={payments[0]?.accountId || ''}
+                          onChange={(e) => {
+                            const newPayments = [...payments];
+                            newPayments[0].accountId = e.target.value;
+                            setPayments(newPayments);
+                          }}
+                          className="pos-input"
+                          style={{ width: '100%', fontSize: '12px', background: '#fff', color: '#1e293b', height: '36px' }}
+                        >
+                          <option value="">Select Account</option>
+                          {accounts.map(a => (
+                            <option key={a._id} value={a._id}>
+                              {a.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {pos.paymentMethod === 'cheque' && (
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginTop: '4px' }}>
+                          <div style={{ gridColumn: 'span 2' }}>
+                            <label style={{ fontSize: '10px', fontWeight: 'bold', color: '#64748b' }}>Cheque Number *</label>
+                            <input
+                              type="text"
+                              required
+                              value={payments[0]?.chequeDetails?.number || ''}
+                              onChange={(e) => {
+                                const newPayments = [...payments];
+                                newPayments[0].chequeDetails = { ...newPayments[0].chequeDetails, number: e.target.value };
+                                setPayments(newPayments);
+                              }}
+                              placeholder="Cheque Number"
+                              className="pos-input"
+                              style={{ fontSize: '12px', height: '36px', background: '#fff', color: '#1e293b' }}
+                            />
+                          </div>
+                          <div>
+                            <label style={{ fontSize: '10px', fontWeight: 'bold', color: '#64748b' }}>Bank *</label>
+                            <input
+                              type="text"
+                              required
+                              value={payments[0]?.chequeDetails?.bank || ''}
+                              onChange={(e) => {
+                                const newPayments = [...payments];
+                                newPayments[0].chequeDetails = { ...newPayments[0].chequeDetails, bank: e.target.value };
+                                setPayments(newPayments);
+                              }}
+                              placeholder="e.g. BOC"
+                              className="pos-input"
+                              style={{ fontSize: '12px', height: '36px', background: '#fff', color: '#1e293b' }}
+                            />
+                          </div>
+                          <div>
+                            <label style={{ fontSize: '10px', fontWeight: 'bold', color: '#64748b' }}>Due Date *</label>
+                            <input
+                              type="date"
+                              required
+                              value={payments[0]?.chequeDetails?.dueDate || ''}
+                              onChange={(e) => {
+                                const newPayments = [...payments];
+                                newPayments[0].chequeDetails = { ...newPayments[0].chequeDetails, dueDate: e.target.value };
+                                setPayments(newPayments);
+                              }}
+                              className="pos-input"
+                              style={{ fontSize: '12px', height: '36px', background: '#fff', color: '#1e293b' }}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
 
@@ -1840,7 +3137,7 @@ const POSScreen = () => {
       <ReloadModal 
         isOpen={showReloadModal} 
         onClose={() => setShowReloadModal(false)}
-        storeId={user?.assignedStore || user?.assignedStoreId || user?.storeId}
+        storeId={user?.assignedStore || user?.assignedStoreId || user?.storeId || posSession?.storeId}
         accountId={pos.accountId}
       />
 

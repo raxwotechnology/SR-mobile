@@ -7,6 +7,7 @@ import { toast } from 'react-toastify';
 import { exportToCSV, exportToExcel, exportToPDF } from '../../utils/exportUtils';
 import { adminNavGroups as navItems } from './adminNavItems';
 import useAdminStoreStore from '../../store/adminStoreStore';
+import DeleteConfirmationModal from '../../components/DeleteConfirmationModal';
 
 const EXPENSE_CATEGORIES = ['Employee Payments', 'Utilities', 'Water Bill', 'Electricity', 'Overtime', 'Rent', 'Salaries', 'Marketing', 'Transport', 'Supplies', 'Maintenance', 'Insurance', 'Internet & Phone', 'Equipment', 'Packaging', 'Cleaning', 'Security', 'Miscellaneous', 'Other'];
 const INCOME_CATEGORIES = ['Sales', 'Interest', 'Rent Income', 'Commission', 'Refund', 'Insurance Claim', 'Asset Sale', 'Sponsorship', 'Other Income', 'Other'];
@@ -141,10 +142,18 @@ const AdminExpenses = () => {
     }
   };
 
-  const handleDelete = async (id) => {
-    if (!window.confirm(`Delete this record?`)) return;
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState(null);
+
+  const handleDeleteClick = (tx) => {
+    setItemToDelete({ id: tx._id, name: tx.description || tx.category });
+    setDeleteModalOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!itemToDelete) return;
     try {
-      await deleteTransaction(id);
+      await deleteTransaction(itemToDelete.id);
       toast.success('Record deleted');
       fetchData();
     } catch (err) { toast.error('Failed to delete'); }
@@ -292,7 +301,7 @@ const AdminExpenses = () => {
                     <td className="px-6 py-4 text-right">
                       <div className="flex items-center justify-end gap-1">
                         <button onClick={() => openEdit(tx)} className="p-2 rounded-lg hover:bg-blue-50 text-blue-600 transition-colors"><Edit2 size={16} /></button>
-                        <button onClick={() => handleDelete(tx._id)} className="p-2 rounded-lg hover:bg-red-50 text-red-500 transition-colors"><Trash2 size={16} /></button>
+                        <button onClick={() => handleDeleteClick(tx)} className="p-2 rounded-lg hover:bg-red-50 text-red-500 transition-colors"><Trash2 size={16} /></button>
                       </div>
                     </td>
                   </tr>
@@ -441,6 +450,13 @@ const AdminExpenses = () => {
           </div>
         </div>
       )}
+
+      <DeleteConfirmationModal
+        isOpen={deleteModalOpen}
+        onClose={() => { setDeleteModalOpen(false); setItemToDelete(null); }}
+        onConfirm={handleDeleteConfirm}
+        itemName={itemToDelete?.name}
+      />
     </DashboardLayout>
   );
 };

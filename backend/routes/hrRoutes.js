@@ -3,7 +3,7 @@ const router = express.Router();
 const {
   checkIn, checkOut, getMyAttendance, getAttendanceReport,
   requestLeave, getMyLeaves, getStoreLeaves, approveLeave, rejectLeave,
-  getEmployees, addEmployee, updateEmployee,
+  getEmployees, addEmployee, updateEmployee, deleteEmployee,
   startBreak, endBreak, getBreakHistory, getActiveBreak,
   createTarget, getTargets, getMyTargets, updateTargetProgress, payTargetBonus,
   getEmployeePerformance,
@@ -32,6 +32,7 @@ router.post('/leaves/create-for-employee', requirePermission('employees'), admin
 router.get('/employees', requirePermission('employees'), getEmployees);
 router.post('/employees', requirePermission('employees'), addEmployee);
 router.put('/employees/:id', requirePermission('employees'), updateEmployee);
+router.delete('/employees/:id', requirePermission('employees'), deleteEmployee);
 
 // Breaks
 router.post('/breaks/start', authorize('cashier', 'deliveryGuy', 'stockEmployee', 'manager'), startBreak);
@@ -49,5 +50,33 @@ router.delete('/targets/:id', requirePermission('employees'), deleteTarget);
 
 // Performance
 router.get('/performance/:employeeId', requirePermission('employees'), getEmployeePerformance);
+
+// Policy Controller Imports
+const {
+  getLeavePolicies,
+  createLeavePolicy,
+  updateLeavePolicy,
+  deleteLeavePolicy,
+  getAttendancePolicies,
+  createAttendancePolicy,
+  updateAttendancePolicy,
+  deleteAttendancePolicy,
+  assignPoliciesToEmployee,
+  assignPoliciesToAllEmployees,
+} = require('../controllers/policyController');
+
+// Policies
+router.get('/policies/leave', requirePermission('employees'), getLeavePolicies);
+router.post('/policies/leave', requirePermission('employees'), createLeavePolicy);
+router.put('/policies/leave/:id', requirePermission('employees'), updateLeavePolicy);
+router.delete('/policies/leave/:id', requirePermission('employees'), deleteLeavePolicy);
+
+router.get('/policies/attendance', requirePermission('employees'), getAttendancePolicies);
+router.post('/policies/attendance', requirePermission('employees'), createAttendancePolicy);
+router.put('/policies/attendance/:id', requirePermission('employees'), updateAttendancePolicy);
+router.delete('/policies/attendance/:id', requirePermission('employees'), deleteAttendancePolicy);
+
+router.post('/policies/assign', requirePermission('employees'), assignPoliciesToEmployee);
+router.post('/policies/assign-all', requirePermission('employees'), assignPoliciesToAllEmployees);
 
 module.exports = router;

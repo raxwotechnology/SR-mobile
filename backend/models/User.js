@@ -89,11 +89,14 @@ const userSchema = mongoose.Schema(
       joinDate: { type: Date },
       bankAccount: { type: String },
       bankName: { type: String },
+      bankBranch: { type: String },
       epfNo: { type: String },
       etfNo: { type: String },
       nic: { type: String },
       payType: { type: String, enum: ['monthly', 'weekly', 'daily'], default: 'monthly' },
       status: { type: String, enum: ['active', 'on_leave', 'terminated'], default: 'active' },
+      leavePolicyId: { type: mongoose.Schema.Types.ObjectId, ref: 'LeavePolicy' },
+      attendancePolicyId: { type: mongoose.Schema.Types.ObjectId, ref: 'AttendancePolicy' },
     },
 
     // Credit Management

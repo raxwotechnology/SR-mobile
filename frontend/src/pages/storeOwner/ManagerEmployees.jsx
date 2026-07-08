@@ -1,12 +1,11 @@
 import { useState, useEffect } from 'react';
-import { Users, Search, Edit3, Save, X, UserPlus, Clock, Calendar, CheckCircle } from 'lucide-react';
+import { Users, Search, Edit3, Save, X, UserPlus, Clock, Calendar, CheckCircle, Trash2 } from 'lucide-react';
 import DashboardLayout from '../../components/DashboardLayout';
-import { getEmployees, addEmployee, updateEmployee, adminMarkAttendance, adminCreateLeave, getAttendanceReport, getStoreLeaves } from '../../services/api';
+import { getEmployees, addEmployee, updateEmployee, deleteEmployee } from '../../services/api';
 import { toast } from 'react-toastify';
-import { managerNavGroups as navItems } from './managerNavItems';
+import { managerNavGroups } from './managerNavItems';
 import useAuthStore from '../../store/authStore';
-
-
+import DeleteConfirmationModal from '../../components/DeleteConfirmationModal';
 
 const roleColors = {
   cashier: 'bg-teal-100 text-teal-700',
@@ -17,19 +16,22 @@ const roleColors = {
 
 const emptyNewForm = {
   name: '', email: '', password: '', phone: '', role: 'cashier',
-  salary: '', department: '', bankAccount: '', bankName: '', epfNo: '', etfNo: '',
+  salary: '', department: '', bankAccount: '', bankName: '', bankBranch: '', epfNo: '', etfNo: '',
 };
 
-const ManagerEmployees = ({ navItems = managerNavItems, title = 'Manager Dashboard' }) => {
+const ManagerEmployees = ({ navItems = managerNavGroups, title = 'Manager Dashboard' }) => {
   const user = useAuthStore((s) => s.user);
   const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [editing, setEditing] = useState(null);
-  const [editForm, setEditForm] = useState({});
   const [showAddModal, setShowAddModal] = useState(false);
   const [newForm, setNewForm] = useState(emptyNewForm);
+  const [editingId, setEditingId] = useState(null);
   const [adding, setAdding] = useState(false);
+
+  // Deletion Password Confirmation States
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState(null);
 
   useEffect(() => { fetchEmployees(); }, []);
 
@@ -44,47 +46,77 @@ const ManagerEmployees = ({ navItems = managerNavItems, title = 'Manager Dashboa
     }
   };
 
-  const handleEdit = (emp) => {
-    setEditing(emp._id);
-    setEditForm({
-      salary: emp.employeeInfo?.salary || 0,
+  const openCreate = () => {
+    setEditingId(null);
+    setNewForm(emptyNewForm);
+    setShowAddModal(true);
+  };
+
+  const openEdit = (emp) => {
+    setEditingId(emp._id);
+    setNewForm({
+      name: emp.name || '',
+      email: emp.email || '',
+      password: '', // Blank by default when editing
+      phone: emp.phone || '',
+      role: emp.role || 'cashier',
+      salary: emp.employeeInfo?.salary || '',
       department: emp.employeeInfo?.department || '',
       bankAccount: emp.employeeInfo?.bankAccount || '',
       bankName: emp.employeeInfo?.bankName || '',
+      bankBranch: emp.employeeInfo?.bankBranch || '',
       epfNo: emp.employeeInfo?.epfNo || '',
       etfNo: emp.employeeInfo?.etfNo || '',
     });
+    setShowAddModal(true);
   };
 
-  const handleSave = async (id) => {
+  const handleDeleteClick = (emp) => {
+    setItemToDelete({ id: emp._id, name: emp.name });
+    setDeleteModalOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!itemToDelete) return;
     try {
-      await updateEmployee(id, editForm);
-      toast.success('Employee updated');
-      setEditing(null);
+      await deleteEmployee(itemToDelete.id);
+      toast.success('Employee deleted successfully');
       fetchEmployees();
     } catch (err) {
-      toast.error('Failed to update');
+      toast.error(err.response?.data?.message || 'Failed to delete employee');
     }
   };
 
-  const handleAddEmployee = async (e) => {
+  const handleSaveEmployee = async (e) => {
     e.preventDefault();
-    if (!newForm.name || !newForm.email || !newForm.password) {
+    if (!newForm.name || !newForm.email || (!editingId && !newForm.password)) {
       toast.error('Name, email and password are required');
       return;
     }
     setAdding(true);
     try {
-      await addEmployee({
+      const payload = {
         ...newForm,
         salary: Number(newForm.salary) || 0,
-      });
-      toast.success('Employee registered successfully!');
+      };
+
+      if (editingId) {
+        if (!payload.password) {
+          delete payload.password; // Do not overwrite with blank password
+        }
+        await updateEmployee(editingId, payload);
+        toast.success('Employee updated successfully!');
+      } else {
+        await addEmployee(payload);
+        toast.success('Employee registered successfully!');
+      }
+
       setShowAddModal(false);
       setNewForm(emptyNewForm);
+      setEditingId(null);
       fetchEmployees();
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to add employee');
+      toast.error(err.response?.data?.message || 'Failed to save employee');
     } finally {
       setAdding(false);
     }
@@ -93,7 +125,6 @@ const ManagerEmployees = ({ navItems = managerNavItems, title = 'Manager Dashboa
   const filtered = employees.filter(
     (e) => e.name?.toLowerCase().includes(search.toLowerCase()) || e.email?.toLowerCase().includes(search.toLowerCase())
   );
-
 
   if (loading) {
     return (
@@ -110,11 +141,11 @@ const ManagerEmployees = ({ navItems = managerNavItems, title = 'Manager Dashboa
       <div>
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="text-2xl font-bold text-dark-navy">👥 Employees</h1>
+            <h1 className="text-2xl font-bold text-dark-navy">👨🏻‍👩🏻‍👦🏻‍👦🏻 Employees</h1>
             <p className="text-muted-text text-sm mt-1">{employees.length} staff members</p>
           </div>
           <div className="flex gap-2 flex-wrap">
-            <button onClick={() => setShowAddModal(true)}
+            <button onClick={openCreate}
               className="flex items-center gap-2 bg-primary-blue hover:bg-emerald-600 text-white font-medium px-5 py-2.5 rounded-xl transition-colors shadow-md text-sm">
               <UserPlus size={16} /> Add Employee
             </button>
@@ -160,171 +191,146 @@ const ManagerEmployees = ({ navItems = managerNavItems, title = 'Manager Dashboa
                   {emp.assignedStore?.name && (
                     <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full">🏪 {emp.assignedStore.name}</span>
                   )}
-                  {editing !== emp._id ? (
-                    <button onClick={() => handleEdit(emp)} className="p-2 rounded-lg hover:bg-emerald-50 text-muted-text hover:text-primary-blue transition-colors">
+                  <div className="flex gap-1">
+                    <button onClick={() => openEdit(emp)} className="p-2 rounded-lg hover:bg-emerald-50 text-muted-text hover:text-primary-blue transition-colors" title="Edit">
                       <Edit3 size={16} />
                     </button>
-                  ) : (
-                    <div className="flex gap-1">
-                      <button onClick={() => handleSave(emp._id)} className="p-2 rounded-lg bg-emerald-50 text-primary-blue"><Save size={16} /></button>
-                      <button onClick={() => setEditing(null)} className="p-2 rounded-lg bg-red-50 text-red-500"><X size={16} /></button>
-                    </div>
-                  )}
+                    <button onClick={() => handleDeleteClick(emp)} className="p-2 rounded-lg hover:bg-red-50 text-red-500 hover:text-red-700 transition-colors" title="Delete">
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
                 </div>
               </div>
 
-              {editing === emp._id ? (
-                <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  <div>
-                    <label className="text-xs text-muted-text block mb-1">Salary (LKR)</label>
-                    <input type="number" value={editForm.salary} onChange={(e) => setEditForm({...editForm, salary: Number(e.target.value)})}
-                      className="w-full border border-card-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-blue" />
-                  </div>
-                  <div>
-                    <label className="text-xs text-muted-text block mb-1">Department</label>
-                    <input value={editForm.department} onChange={(e) => setEditForm({...editForm, department: e.target.value})}
-                      className="w-full border border-card-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-blue" />
-                  </div>
-                  <div>
-                    <label className="text-xs text-muted-text block mb-1">Bank Name</label>
-                    <input value={editForm.bankName} onChange={(e) => setEditForm({...editForm, bankName: e.target.value})}
-                      className="w-full border border-card-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-blue" />
-                  </div>
-                  <div>
-                    <label className="text-xs text-muted-text block mb-1">Bank Account</label>
-                    <input value={editForm.bankAccount} onChange={(e) => setEditForm({...editForm, bankAccount: e.target.value})}
-                      className="w-full border border-card-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-blue" />
-                  </div>
-                  <div>
-                    <label className="text-xs text-muted-text block mb-1">EPF No</label>
-                    <input value={editForm.epfNo} onChange={(e) => setEditForm({...editForm, epfNo: e.target.value})}
-                      className="w-full border border-card-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-blue" />
-                  </div>
-                  <div>
-                    <label className="text-xs text-muted-text block mb-1">ETF No</label>
-                    <input value={editForm.etfNo} onChange={(e) => setEditForm({...editForm, etfNo: e.target.value})}
-                      className="w-full border border-card-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-blue" />
-                  </div>
-                </div>
-              ) : (
-                <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs text-muted-text">
-                  <span>💰 Rs. {(emp.employeeInfo?.salary || 0).toLocaleString()}</span>
-                  <span>🏢 {emp.employeeInfo?.department || '—'}</span>
-                  <span>🏦 {emp.employeeInfo?.bankName || '—'}</span>
-                  <span>📋 EPF: {emp.employeeInfo?.epfNo || '—'}</span>
-                </div>
-              )}
+              <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs text-muted-text">
+                <span>💰 Rs. {(emp.employeeInfo?.salary || 0).toLocaleString()}</span>
+                <span>🏢 {emp.employeeInfo?.department || '—'}</span>
+                <span>🏦 {emp.employeeInfo?.bankName || '—'} {emp.employeeInfo?.bankBranch ? `(${emp.employeeInfo.bankBranch})` : ''}</span>
+                <span>📋 EPF: {emp.employeeInfo?.epfNo || '—'}</span>
+              </div>
             </div>
           ))}
         </div>
 
-      {showAddModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl">
-            <div className="flex items-center justify-between p-5 border-b border-card-border">
-              <h2 className="text-lg font-bold text-dark-navy flex items-center gap-2">
-                <UserPlus size={20} className="text-primary-blue" /> Register New Employee
-              </h2>
-              <button onClick={() => setShowAddModal(false)} className="p-1.5 rounded-lg hover:bg-gray-100"><X size={18} /></button>
+        {showAddModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl">
+              <div className="flex items-center justify-between p-5 border-b border-card-border">
+                <h2 className="text-lg font-bold text-dark-navy flex items-center gap-2">
+                  <UserPlus size={20} className="text-primary-blue" /> {editingId ? 'Edit Employee Info' : 'Register New Employee'}
+                </h2>
+                <button onClick={() => setShowAddModal(false)} className="p-1.5 rounded-lg hover:bg-gray-100"><X size={18} /></button>
+              </div>
+
+              <form onSubmit={handleSaveEmployee} className="p-5 space-y-4">
+                {/* Basic Info */}
+                <div className="bg-gray-50 rounded-xl p-4 space-y-3">
+                  <h3 className="text-sm font-semibold text-dark-navy mb-2">👤 Basic Information</h3>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="col-span-2">
+                      <label className="text-xs text-muted-text block mb-1">Full Name *</label>
+                      <input required value={newForm.name} onChange={(e) => setNewForm({...newForm, name: e.target.value})}
+                        className="w-full border border-card-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-blue" placeholder="John Doe" />
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-text block mb-1">Email *</label>
+                      <input required type="email" value={newForm.email} onChange={(e) => setNewForm({...newForm, email: e.target.value})}
+                        className="w-full border border-card-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-blue" placeholder="john@example.com" />
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-text block mb-1">Password {editingId ? '(Leave blank to keep same)' : '*'}</label>
+                      <input required={!editingId} type="password" value={newForm.password} onChange={(e) => setNewForm({...newForm, password: e.target.value})}
+                        className="w-full border border-card-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-blue" placeholder={editingId ? '••••••••' : 'Min 6 characters'} />
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-text block mb-1">Phone</label>
+                      <input value={newForm.phone} onChange={(e) => setNewForm({...newForm, phone: e.target.value})}
+                        className="w-full border border-card-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-blue" placeholder="+94 7X XXX XXXX" />
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-text block mb-1">Role *</label>
+                      <select value={newForm.role} onChange={(e) => setNewForm({...newForm, role: e.target.value})}
+                        className="w-full border border-card-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-blue bg-white">
+                        <option value="cashier">Cashier</option>
+                        <option value="deliveryGuy">Delivery Rider</option>
+                        <option value="stockEmployee">Stock Employee</option>
+                        {user?.role === 'admin' && <option value="manager">Manager</option>}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Employment Info */}
+                <div className="bg-gray-50 rounded-xl p-4 space-y-3">
+                  <h3 className="text-sm font-semibold text-dark-navy mb-2">💼 Employment Details</h3>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs text-muted-text block mb-1">Monthly Salary (LKR)</label>
+                      <input type="number" value={newForm.salary} onChange={(e) => setNewForm({...newForm, salary: e.target.value})}
+                        className="w-full border border-card-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-blue" placeholder="45000" />
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-text block mb-1">Department</label>
+                      <input value={newForm.department} onChange={(e) => setNewForm({...newForm, department: e.target.value})}
+                        className="w-full border border-card-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-blue" placeholder="Sales / Logistics" />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Bank & EPF/ETF */}
+                <div className="bg-gray-50 rounded-xl p-4 space-y-3">
+                  <h3 className="text-sm font-semibold text-dark-navy mb-2">🏦 Bank & Statutory Details</h3>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs text-muted-text block mb-1">Bank Name</label>
+                      <input value={newForm.bankName} onChange={(e) => setNewForm({...newForm, bankName: e.target.value})}
+                        className="w-full border border-card-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-blue" placeholder="Bank of Ceylon" />
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-text block mb-1">Bank Branch</label>
+                      <input value={newForm.bankBranch} onChange={(e) => setNewForm({...newForm, bankBranch: e.target.value})}
+                        className="w-full border border-card-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-blue" placeholder="Colombo Main" />
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-text block mb-1">Account Number</label>
+                      <input value={newForm.bankAccount} onChange={(e) => setNewForm({...newForm, bankAccount: e.target.value})}
+                        className="w-full border border-card-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-blue" placeholder="XXXX XXXX XXXX" />
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-text block mb-1">EPF Number</label>
+                      <input value={newForm.epfNo} onChange={(e) => setNewForm({...newForm, epfNo: e.target.value})}
+                        className="w-full border border-card-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-blue" placeholder="EPF-XXXXX" />
+                    </div>
+                    <div className="col-span-2">
+                      <label className="text-xs text-muted-text block mb-1">ETF Number</label>
+                      <input value={newForm.etfNo} onChange={(e) => setNewForm({...newForm, etfNo: e.target.value})}
+                        className="w-full border border-card-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-blue" placeholder="ETF-XXXXX" />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-3 pt-2">
+                  <button type="button" onClick={() => setShowAddModal(false)}
+                    className="px-5 py-2.5 text-sm font-medium text-muted-text hover:text-dark-navy transition-colors">
+                    Cancel
+                  </button>
+                  <button type="submit" disabled={adding}
+                    className="flex items-center gap-2 bg-primary-blue hover:bg-emerald-600 text-white font-medium px-6 py-2.5 rounded-xl transition-colors shadow-md disabled:opacity-50">
+                    <UserPlus size={16} /> {adding ? 'Saving...' : editingId ? 'Update Employee' : 'Register Employee'}
+                  </button>
+                </div>
+              </form>
             </div>
-
-            <form onSubmit={handleAddEmployee} className="p-5 space-y-4">
-              {/* Basic Info */}
-              <div className="bg-gray-50 rounded-xl p-4 space-y-3">
-                <h3 className="text-sm font-semibold text-dark-navy mb-2">👤 Basic Information</h3>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="col-span-2">
-                    <label className="text-xs text-muted-text block mb-1">Full Name *</label>
-                    <input required value={newForm.name} onChange={(e) => setNewForm({...newForm, name: e.target.value})}
-                      className="w-full border border-card-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-blue" placeholder="John Doe" />
-                  </div>
-                  <div>
-                    <label className="text-xs text-muted-text block mb-1">Email *</label>
-                    <input required type="email" value={newForm.email} onChange={(e) => setNewForm({...newForm, email: e.target.value})}
-                      className="w-full border border-card-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-blue" placeholder="john@example.com" />
-                  </div>
-                  <div>
-                    <label className="text-xs text-muted-text block mb-1">Password *</label>
-                    <input required type="password" value={newForm.password} onChange={(e) => setNewForm({...newForm, password: e.target.value})}
-                      className="w-full border border-card-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-blue" placeholder="Min 6 characters" />
-                  </div>
-                  <div>
-                    <label className="text-xs text-muted-text block mb-1">Phone</label>
-                    <input value={newForm.phone} onChange={(e) => setNewForm({...newForm, phone: e.target.value})}
-                      className="w-full border border-card-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-blue" placeholder="+94 7X XXX XXXX" />
-                  </div>
-                  <div>
-                    <label className="text-xs text-muted-text block mb-1">Role *</label>
-                    <select value={newForm.role} onChange={(e) => setNewForm({...newForm, role: e.target.value})}
-                      className="w-full border border-card-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-blue bg-white">
-                      <option value="cashier">Cashier</option>
-                      <option value="deliveryGuy">Delivery Rider</option>
-                      <option value="stockEmployee">Stock Employee</option>
-                      {user?.role === 'admin' && <option value="manager">Manager</option>}
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              {/* Employment Info */}
-              <div className="bg-gray-50 rounded-xl p-4 space-y-3">
-                <h3 className="text-sm font-semibold text-dark-navy mb-2">💼 Employment Details</h3>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-xs text-muted-text block mb-1">Monthly Salary (LKR)</label>
-                    <input type="number" value={newForm.salary} onChange={(e) => setNewForm({...newForm, salary: e.target.value})}
-                      className="w-full border border-card-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-blue" placeholder="45000" />
-                  </div>
-                  <div>
-                    <label className="text-xs text-muted-text block mb-1">Department</label>
-                    <input value={newForm.department} onChange={(e) => setNewForm({...newForm, department: e.target.value})}
-                      className="w-full border border-card-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-blue" placeholder="Sales / Logistics" />
-                  </div>
-                </div>
-              </div>
-
-              {/* Bank & EPF/ETF */}
-              <div className="bg-gray-50 rounded-xl p-4 space-y-3">
-                <h3 className="text-sm font-semibold text-dark-navy mb-2">🏦 Bank & Statutory Details</h3>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-xs text-muted-text block mb-1">Bank Name</label>
-                    <input value={newForm.bankName} onChange={(e) => setNewForm({...newForm, bankName: e.target.value})}
-                      className="w-full border border-card-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-blue" placeholder="Bank of Ceylon" />
-                  </div>
-                  <div>
-                    <label className="text-xs text-muted-text block mb-1">Account Number</label>
-                    <input value={newForm.bankAccount} onChange={(e) => setNewForm({...newForm, bankAccount: e.target.value})}
-                      className="w-full border border-card-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-blue" placeholder="XXXX XXXX XXXX" />
-                  </div>
-                  <div>
-                    <label className="text-xs text-muted-text block mb-1">EPF Number</label>
-                    <input value={newForm.epfNo} onChange={(e) => setNewForm({...newForm, epfNo: e.target.value})}
-                      className="w-full border border-card-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-blue" placeholder="EPF-XXXXX" />
-                  </div>
-                  <div>
-                    <label className="text-xs text-muted-text block mb-1">ETF Number</label>
-                    <input value={newForm.etfNo} onChange={(e) => setNewForm({...newForm, etfNo: e.target.value})}
-                      className="w-full border border-card-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-blue" placeholder="ETF-XXXXX" />
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-3 pt-2">
-                <button type="button" onClick={() => setShowAddModal(false)}
-                  className="px-5 py-2.5 text-sm font-medium text-muted-text hover:text-dark-navy transition-colors">
-                  Cancel
-                </button>
-                <button type="submit" disabled={adding}
-                  className="flex items-center gap-2 bg-primary-blue hover:bg-emerald-600 text-white font-medium px-6 py-2.5 rounded-xl transition-colors shadow-md disabled:opacity-50">
-                  <UserPlus size={16} /> {adding ? 'Registering...' : 'Register Employee'}
-                </button>
-              </div>
-            </form>
           </div>
-        </div>
-      )}
+        )}
       </div>
+
+      <DeleteConfirmationModal
+        isOpen={deleteModalOpen}
+        onClose={() => { setDeleteModalOpen(false); setItemToDelete(null); }}
+        onConfirm={handleDeleteConfirm}
+        itemName={itemToDelete?.name}
+      />
     </DashboardLayout>
   );
 };

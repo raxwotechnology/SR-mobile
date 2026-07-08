@@ -25,7 +25,10 @@ const recordTransaction = async ({
     'bank_transfer': 'Bank Transfer',
     'cheque': 'Cheque',
     'card': 'Card',
-    'other': 'Card'
+    'payhere': 'Card',
+    'other': 'Card',
+    'koko': 'Koko',
+    'hire_purchase': 'Hire Purchase'
   };
   if (map[paymentMethod?.toLowerCase()]) {
     normalizedMethod = map[paymentMethod.toLowerCase()];

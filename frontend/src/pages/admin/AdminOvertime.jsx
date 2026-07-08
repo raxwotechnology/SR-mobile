@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Clock, Plus, DollarSign, User, CheckCircle, Trash2, X, Download, Search, ChevronRight, ArrowLeft } from 'lucide-react';
 import DashboardLayout from '../../components/DashboardLayout';
+import DeleteConfirmationModal from '../../components/DeleteConfirmationModal';
 import { adminNavGroups as navItems } from './adminNavItems';
 import { getOvertimeSummary, getOvertimeRecords, createOvertimeRecord, markOvertimePaid, rejectOvertimeRecord, deleteOvertimeRecord, getEmployeeOTReport } from '../../services/api';
 import API from '../../services/api';
@@ -13,6 +14,8 @@ const AdminOvertime = () => {
   const [loading, setLoading] = useState(true);
   const [employees, setEmployees] = useState([]);
   const [showModal, setShowModal] = useState(false);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState(null);
   const [form, setForm] = useState({ employeeId: '', date: new Date().toISOString().split('T')[0], hours: '', ratePerHour: '', description: '' });
   const [search, setSearch] = useState('');
   const [dateRange, setDateRange] = useState({ startDate: '', endDate: '' });
@@ -85,14 +88,21 @@ const AdminOvertime = () => {
     } catch (err) { toast.error('Failed to reject OT'); }
   };
 
-  const handleDelete = async (id) => {
-    if (!window.confirm('Delete this OT record?')) return;
+  const handleDeleteClick = (record) => {
+    setItemToDelete(record);
+    setDeleteModalOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
     try {
-      await deleteOvertimeRecord(id);
+      await deleteOvertimeRecord(itemToDelete._id);
       toast.success('Deleted');
+      setDeleteModalOpen(false);
       fetchData();
       if (selectedEmployee) viewEmployeeReport(selectedEmployee);
-    } catch (err) { toast.error('Failed to delete'); }
+    } catch (err) {
+      toast.error('Failed to delete');
+    }
   };
 
   const viewEmployeeReport = async (empId) => {
@@ -277,7 +287,7 @@ const AdminOvertime = () => {
                               <button onClick={() => handleReject(r._id)} className="px-2 py-1 rounded-lg bg-red-50 text-red-600 text-xs font-semibold hover:bg-red-100">Reject</button>
                             </>
                           )}
-                          <button onClick={() => handleDelete(r._id)} className="p-1 rounded-lg hover:bg-red-50 text-red-400"><Trash2 size={14} /></button>
+                          <button onClick={() => handleDeleteClick(r)} className="p-1 rounded-lg hover:bg-red-50 text-red-400"><Trash2 size={14} /></button>
                         </div>
                       </td>
                     </tr>
@@ -386,7 +396,7 @@ const AdminOvertime = () => {
                                 <button onClick={() => handleReject(r._id)} className="px-2.5 py-1 rounded-lg bg-red-50 text-red-600 text-xs font-semibold hover:bg-red-100">Reject</button>
                               </>
                             )}
-                            <button onClick={() => handleDelete(r._id)} className="p-1.5 rounded-lg hover:bg-red-50 text-red-400"><Trash2 size={14} /></button>
+                            <button onClick={() => handleDeleteClick(r)} className="p-1.5 rounded-lg hover:bg-red-50 text-red-400"><Trash2 size={14} /></button>
                           </div>
                         </td>
                       </tr>
@@ -452,6 +462,13 @@ const AdminOvertime = () => {
           </div>
         </div>
       )}
+
+      <DeleteConfirmationModal
+        isOpen={deleteModalOpen}
+        onClose={() => { setDeleteModalOpen(false); setItemToDelete(null); }}
+        onConfirm={handleDeleteConfirm}
+        itemName="this OT record"
+      />
     </DashboardLayout>
   );
 };

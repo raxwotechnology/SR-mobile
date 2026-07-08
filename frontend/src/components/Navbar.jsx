@@ -62,7 +62,7 @@ const Navbar = () => {
   const { currency, toggleCurrency, fetchRate, getProductPrice } = useCurrencyStore();
   const settings = useSettingsStore((s) => s.settings);
   const brandName = settings?.shopName || 'Mobile Hub';
-  const brandLogoUrl = settings?.logoUrl;
+  const brandLogoUrl = getImageUrl(settings?.logoUrl);
   const brandPhone = settings?.phone || '+94 11 255 5000';
   const freeDeliveryThreshold = Number(settings?.deliveryFeeThreshold || 5000).toLocaleString();
 
@@ -137,7 +137,10 @@ const Navbar = () => {
 
   // Close mobile menu on route change
   useEffect(() => {
-    setMobileMenuOpen(false);
+    const timer = setTimeout(() => {
+      setMobileMenuOpen(false);
+    }, 0);
+    return () => clearTimeout(timer);
   }, [location.pathname]);
 
   const handleLogout = () => {
@@ -356,9 +359,17 @@ const Navbar = () => {
           {user ? (
             <div className="relative group cursor-pointer">
               <div className="flex items-center gap-2 p-1.5 rounded-lg hover:bg-gray-50 transition-colors">
-                <div className="w-8 h-8 bg-gradient-to-br from-blue-400 to-indigo-500 rounded-full flex items-center justify-center text-white font-bold text-xs shadow-sm">
-                  {user.name.charAt(0).toUpperCase()}
-                </div>
+                {user.avatar ? (
+                  <img
+                    src={getImageUrl(user.avatar)}
+                    alt="Profile"
+                    className="w-8 h-8 rounded-full object-cover border border-slate-200 shadow-sm"
+                  />
+                ) : (
+                  <div className="w-8 h-8 bg-gradient-to-br from-blue-400 to-indigo-500 rounded-full flex items-center justify-center text-white font-bold text-xs shadow-sm">
+                    {user.name.charAt(0).toUpperCase()}
+                  </div>
+                )}
                 <div className="hidden md:block">
                   <p className="text-xs text-muted-text m-0 leading-tight">Hello, {user.name.split(' ')[0]}</p>
                   <p className="text-xs font-bold text-dark-navy m-0 leading-tight flex items-center gap-0.5">Account <ChevronDown size={12} /></p>

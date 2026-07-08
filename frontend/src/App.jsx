@@ -29,6 +29,7 @@ import ManagerTargets from './pages/storeOwner/ManagerTargets';
 import ManagerPerformance from './pages/storeOwner/ManagerPerformance';
 import ManagerInventory from './pages/storeOwner/ManagerInventory';
 import ManagerSupplierPayments from './pages/storeOwner/ManagerSupplierPayments';
+import ManagerRepairs from './pages/storeOwner/ManagerRepairs';
 import AdminOverview from './pages/admin/AdminOverview';
 import AdminUsers from './pages/admin/AdminUsers';
 import AdminStores from './pages/admin/AdminStores';
@@ -39,6 +40,7 @@ import AdminReports from './pages/admin/AdminReports';
 import AdminSettings from './pages/admin/AdminSettings';
 import AdminExpenses from './pages/admin/AdminExpenses';
 import AdminFinancials from './pages/admin/AdminFinancials';
+import AdminProfitReports from './pages/admin/AdminProfitReports';
 import AdminInventory from './pages/admin/AdminInventory';
 import AdminPromotions from './pages/admin/AdminPromotions';
 import AdminProducts from './pages/admin/AdminProducts';
@@ -61,6 +63,7 @@ import AdminCustomerHistory from './pages/admin/AdminCustomerHistory';
 import AdminAttendance from './pages/admin/AdminAttendance';
 import AdminLeaves from './pages/admin/AdminLeaves';
 import AdminReloads from './pages/admin/AdminReloads';
+import AdminRepairs from './pages/admin/AdminRepairs';
 
 
 import AdminTargets from "./pages/admin/AdminTargets";
@@ -78,6 +81,7 @@ import EmployeeReturns from './pages/employee/EmployeeReturns';
 import EmployeeSalary from './pages/employee/EmployeeSalary';
 import EmployeeOvertime from './pages/employee/EmployeeOvertime';
 import CashierStock from './pages/employee/CashierStock';
+import EmployeeRepairs from './pages/employee/EmployeeRepairs';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import useSettingsStore from './store/settingsStore';
@@ -85,9 +89,23 @@ import useSettingsStore from './store/settingsStore';
 const AppLayout = ({ children }) => {
   const location = useLocation();
   const fetchSettings = useSettingsStore((s) => s.fetchSettings);
+  const settings = useSettingsStore((s) => s.settings);
+
   useEffect(() => {
     fetchSettings();
   }, [fetchSettings]);
+
+  useEffect(() => {
+    if (settings?.logoUrl) {
+      let link = document.querySelector("link[rel~='icon']");
+      if (!link) {
+        link = document.createElement('link');
+        link.rel = 'icon';
+        document.getElementsByTagName('head')[0].appendChild(link);
+      }
+      link.href = settings.logoUrl;
+    }
+  }, [settings]);
 
   const path = location.pathname;
 
@@ -148,6 +166,7 @@ function App() {
           <Route path="/manager/performance" element={<ProtectedRoute roles={['manager']}><ManagerPerformance /></ProtectedRoute>} />
           <Route path="/manager/inventory" element={<ProtectedRoute roles={['manager']}><Navigate to="/manager/products" replace /></ProtectedRoute>} />
           <Route path="/manager/supplier-payments" element={<ProtectedRoute roles={['manager']}><ManagerSupplierPayments /></ProtectedRoute>} />
+          <Route path="/manager/repairs" element={<ProtectedRoute roles={['manager']}><ManagerRepairs /></ProtectedRoute>} />
 
           {/* Admin */}
           <Route path="/admin" element={<ProtectedRoute roles={['admin']}><AdminOverview /></ProtectedRoute>} />
@@ -165,7 +184,7 @@ function App() {
           <Route path="/admin/settings" element={<ProtectedRoute roles={['admin']} permission="settings"><AdminSettings /></ProtectedRoute>} />
           <Route path="/admin/expenses" element={<ProtectedRoute roles={['admin']} permission="finance"><AdminExpenses /></ProtectedRoute>} />
           <Route path="/admin/financials" element={<ProtectedRoute roles={['admin']} permission="finance"><AdminFinancials /></ProtectedRoute>} />
-          <Route path="/admin/inventory" element={<ProtectedRoute roles={['admin']} permission="products"><Navigate to="/admin/products" replace /></ProtectedRoute>} />
+          <Route path="/admin/profit-reports" element={<ProtectedRoute roles={['admin']} permission="finance"><AdminProfitReports /></ProtectedRoute>} />
           <Route path="/admin/promotions" element={<ProtectedRoute roles={['admin']} permission="sales"><AdminPromotions /></ProtectedRoute>} />
           <Route path="/admin/barcodes" element={<ProtectedRoute roles={['admin']} permission="products"><AdminBarcodes /></ProtectedRoute>} />
           <Route path="/admin/supplier-payments" element={<ProtectedRoute roles={['admin']} permission="suppliers"><AdminSupplierPayments /></ProtectedRoute>} />
@@ -184,6 +203,7 @@ function App() {
           <Route path="/admin/customer-history" element={<ProtectedRoute roles={['admin']} permission="reports"><AdminCustomerHistory /></ProtectedRoute>} />
           <Route path="/admin/overtime" element={<ProtectedRoute roles={['admin']} permission="finance"><AdminOvertime /></ProtectedRoute>} />
           <Route path="/admin/reloads" element={<ProtectedRoute roles={['admin']} permission="sales"><AdminReloads /></ProtectedRoute>} />
+          <Route path="/admin/repairs" element={<ProtectedRoute roles={['admin']} permission="sales"><AdminRepairs /></ProtectedRoute>} />
 
 
           <Route path="/admin/targets" element={<ProtectedRoute roles={['admin']} permission="employees"><AdminTargets /></ProtectedRoute>} />
@@ -193,7 +213,7 @@ function App() {
 
           {/* Cashier */}
           <Route path="/cashier-login" element={<CashierLogin />} />
-          <Route path="/pos" element={<ProtectedRoute roles={['cashier', 'manager', 'admin']}><POSScreen /></ProtectedRoute>} />
+          <Route path="/pos" element={<POSScreen />} />
 
           {/* Delivery */}
           <Route path="/delivery" element={<ProtectedRoute roles={['deliveryGuy']}><DeliveryDashboard /></ProtectedRoute>} />
@@ -207,6 +227,7 @@ function App() {
           <Route path="/employee/salary" element={<ProtectedRoute roles={['cashier', 'deliveryGuy', 'stockEmployee']}><EmployeeSalary /></ProtectedRoute>} />
           <Route path="/employee/overtime" element={<ProtectedRoute roles={['cashier', 'deliveryGuy', 'stockEmployee', 'manager']}><EmployeeOvertime /></ProtectedRoute>} />
           <Route path="/employee/stock" element={<ProtectedRoute roles={['cashier', 'stockEmployee']}><CashierStock /></ProtectedRoute>} />
+          <Route path="/employee/repairs" element={<ProtectedRoute roles={['cashier', 'stockEmployee']}><EmployeeRepairs /></ProtectedRoute>} />
         </Routes>
       </AppLayout>
       <ToastContainer position="top-right" autoClose={3000} theme="colored" />

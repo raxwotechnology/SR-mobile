@@ -77,6 +77,7 @@ const productSchema = mongoose.Schema(
     buyingPrice: { type: Number },
     customerSpecialPrice: { type: Number },
     supplierPrice: { type: Number },
+    minPrice: { type: Number, default: 0 },
     mrp: {
       type: Number,
       required: true,

@@ -6,6 +6,7 @@ const {
   posCheckout,
   getPosOrders,
   getPosOrderById,
+  getPosOrderByInvoice,
   getActiveSession,
   startSession,
   endSession,
@@ -13,6 +14,7 @@ const {
   getCreditOrders,
   settleCreditOrder,
   createQuotation,
+  sendReceipt,
 } = require('../controllers/posController');
 const { protect, authorize } = require('../middleware/authMiddleware');
 
@@ -23,7 +25,9 @@ router.get('/products', getPosProducts);
 router.get('/products/barcode/:code', getProductByBarcode);
 router.post('/checkout', posCheckout);
 router.get('/orders', getPosOrders);
+router.get('/orders/invoice/:invoiceNumber', getPosOrderByInvoice);
 router.get('/orders/:id', getPosOrderById);
+router.post('/orders/:id/send-receipt', sendReceipt);
 router.get('/session/active', getActiveSession);
 router.post('/session/start', startSession);
 router.post('/session/end', endSession);

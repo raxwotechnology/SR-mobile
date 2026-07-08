@@ -1,12 +1,15 @@
 const Payroll = require('../models/Payroll');
 const User = require('../models/User');
+const Settings = require('../models/Settings');
+const LeavePolicy = require('../models/LeavePolicy');
+const AttendancePolicy = require('../models/AttendancePolicy');
 const { sendNotification } = require('../utils/notificationService');
 const { salaryPaidEmail, sendEmail } = require('../utils/emailService');
 
 // Lazy-loaded: only required when export functions are actually called
 let PDFDocument, XLSX;
 const loadPdfkit = () => { if (!PDFDocument) PDFDocument = require('pdfkit'); return PDFDocument; };
-const loadXlsx = () => { if (!XLSX) XLSX = require('xlsx'); return XLSX; };
+const loadXlsx = () => { if (!XLSX) XLSX = require('sheetjs-style'); return XLSX; };
 
 // Sri Lankan statutory rates
 const EPF_EMPLOYEE_RATE = 0.08; // 8% employee contribution
@@ -20,8 +23,19 @@ const calculateSalary = async (req, res, next) => {
   try {
     const { employeeId, month, year, allowances = 0, deductions = 0, bonuses = 0 } = req.body;
 
-    const employee = await User.findById(employeeId);
+    const employee = await User.findById(employeeId)
+      .populate('employeeInfo.leavePolicyId')
+      .populate('employeeInfo.attendancePolicyId');
     if (!employee) { res.status(404); return next(new Error('Employee not found')); }
+
+    let leavePolicy = employee.employeeInfo?.leavePolicyId;
+    if (!leavePolicy) {
+      leavePolicy = await LeavePolicy.findOne({ isDefault: true });
+    }
+    let attendancePolicy = employee.employeeInfo?.attendancePolicyId;
+    if (!attendancePolicy) {
+      attendancePolicy = await AttendancePolicy.findOne({ isDefault: true });
+    }
 
     const Attendance = require('../models/Attendance');
     const OvertimePay = require('../models/OvertimePay');
@@ -54,21 +68,82 @@ const calculateSalary = async (req, res, next) => {
 
     let basicSalary = 0;
     let attendanceDeductions = 0;
+    let excessLeaveDeduction = 0;
 
     if (payType === 'daily') {
       basicSalary = basePayAmount * totalWorkingDaysCount;
     } else if (payType === 'weekly') {
-      // Approximate 4 weeks per month for simplicity, or count weeks
       basicSalary = basePayAmount * 4; 
     } else {
-      // Monthly
       basicSalary = basePayAmount;
       const dailyRate = basicSalary / 30;
-      attendances.forEach(att => {
-        if (att.status === 'absent') attendanceDeductions += dailyRate;
-        else if (att.status === 'half-day') attendanceDeductions += (dailyRate / 2);
-        else if (att.status === 'late') attendanceDeductions += 200; // Adjusted penalty
-      });
+
+      if (attendancePolicy) {
+        const graceTime = attendancePolicy.graceTimeMinutes || 15;
+        const latePenalty = attendancePolicy.lateArrivalPenalty || 0;
+        const earlyPenalty = attendancePolicy.earlyCheckoutPenalty || 0;
+        const halfDayThreshold = attendancePolicy.halfDayThresholdHours || 4;
+
+        const [startH, startM] = (attendancePolicy.shiftStartTime || '09:00').split(':').map(Number);
+        const shiftStartMinutes = startH * 60 + startM;
+
+        const [endH, endM] = (attendancePolicy.shiftEndTime || '17:00').split(':').map(Number);
+        const shiftEndMinutes = endH * 60 + endM;
+
+        attendances.forEach(att => {
+          if (att.status === 'absent') {
+            attendanceDeductions += dailyRate;
+          } else if (att.status === 'half-day' || (att.hoursWorked > 0 && att.hoursWorked < halfDayThreshold)) {
+            attendanceDeductions += (dailyRate / 2);
+          } else {
+            if (att.checkIn) {
+              const checkInMinutes = att.checkIn.getHours() * 60 + att.checkIn.getMinutes();
+              if (checkInMinutes - shiftStartMinutes > graceTime) {
+                attendanceDeductions += latePenalty;
+              }
+            }
+            if (att.checkOut) {
+              const checkOutMinutes = att.checkOut.getHours() * 60 + att.checkOut.getMinutes();
+              if (shiftEndMinutes - checkOutMinutes > 0) {
+                attendanceDeductions += earlyPenalty;
+              }
+            }
+          }
+        });
+      } else {
+        attendances.forEach(att => {
+          if (att.status === 'absent') attendanceDeductions += dailyRate;
+          else if (att.status === 'half-day') attendanceDeductions += (dailyRate / 2);
+          else if (att.status === 'late') attendanceDeductions += 200;
+        });
+      }
+
+      if (leavePolicy) {
+        const Leave = require('../models/Leave');
+        const leavesYear = await Leave.find({
+          employeeId,
+          status: 'approved',
+          startDate: { $gte: new Date(year, 0, 1) },
+          endDate: { $lte: new Date(year, 11, 31, 23, 59, 59) }
+        });
+
+        let totalExcessDays = 0;
+        const leaveTypes = ['annual', 'sick', 'casual'];
+        for (const type of leaveTypes) {
+          const takenBefore = leavesYear
+            .filter(l => l.leaveType === type && l.startDate < startDate)
+            .reduce((sum, l) => sum + l.totalDays, 0);
+
+          const takenCurrent = leavesYear
+            .filter(l => l.leaveType === type && l.startDate >= startDate && l.startDate <= endDate)
+            .reduce((sum, l) => sum + l.totalDays, 0);
+
+          const limit = leavePolicy[type + 'Leaves'] || 0;
+          const excess = Math.max(0, takenBefore + takenCurrent - limit) - Math.max(0, takenBefore - limit);
+          totalExcessDays += excess;
+        }
+        excessLeaveDeduction = totalExcessDays * (leavePolicy.deductionPerExcessLeave || 0);
+      }
     }
 
     const actualBonuses = Number(bonuses) + totalOTAmount + totalTargetBonus;
@@ -77,9 +152,8 @@ const calculateSalary = async (req, res, next) => {
     const epfEmployer = parseFloat((basicSalary * EPF_EMPLOYER_RATE).toFixed(2));
     const etfEmployer = parseFloat((basicSalary * ETF_RATE).toFixed(2));
     
-    const totalDeductions = epfEmployee + Number(deductions) + attendanceDeductions;
+    const totalDeductions = epfEmployee + Number(deductions) + excessLeaveDeduction + attendanceDeductions;
     const netSalary = parseFloat((grossSalary - totalDeductions).toFixed(2));
-
 
     res.json({
       employeeId,
@@ -95,7 +169,7 @@ const calculateSalary = async (req, res, next) => {
       epfEmployee,
       epfEmployer,
       etfEmployer,
-      otherDeductions: Number(deductions),
+      otherDeductions: Number(deductions) + excessLeaveDeduction,
       attendanceDeductions,
       totalDeductions,
       netSalary,
@@ -117,8 +191,19 @@ const processSalaryPayment = async (req, res, next) => {
       return next(new Error(`Salary already processed for ${month}/${year}`));
     }
 
-    const employee = await User.findById(employeeId);
+    const employee = await User.findById(employeeId)
+      .populate('employeeInfo.leavePolicyId')
+      .populate('employeeInfo.attendancePolicyId');
     if (!employee) { res.status(404); return next(new Error('Employee not found')); }
+
+    let leavePolicy = employee.employeeInfo?.leavePolicyId;
+    if (!leavePolicy) {
+      leavePolicy = await LeavePolicy.findOne({ isDefault: true });
+    }
+    let attendancePolicy = employee.employeeInfo?.attendancePolicyId;
+    if (!attendancePolicy) {
+      attendancePolicy = await AttendancePolicy.findOne({ isDefault: true });
+    }
 
     const Attendance = require('../models/Attendance');
     const OvertimePay = require('../models/OvertimePay');
@@ -146,6 +231,7 @@ const processSalaryPayment = async (req, res, next) => {
 
     let basicSalary = 0;
     let attendanceDeductions = 0;
+    let excessLeaveDeduction = 0;
 
     if (payType === 'daily') {
       basicSalary = basePayAmount * totalDaysWorked;
@@ -154,11 +240,73 @@ const processSalaryPayment = async (req, res, next) => {
     } else {
       basicSalary = basePayAmount;
       const dailyRate = basicSalary / 30;
-      attendances.forEach(att => {
-        if (att.status === 'absent') attendanceDeductions += dailyRate;
-        else if (att.status === 'half-day') attendanceDeductions += (dailyRate / 2);
-        else if (att.status === 'late') attendanceDeductions += 200;
-      });
+
+      if (attendancePolicy) {
+        const graceTime = attendancePolicy.graceTimeMinutes || 15;
+        const latePenalty = attendancePolicy.lateArrivalPenalty || 0;
+        const earlyPenalty = attendancePolicy.earlyCheckoutPenalty || 0;
+        const halfDayThreshold = attendancePolicy.halfDayThresholdHours || 4;
+
+        const [startH, startM] = (attendancePolicy.shiftStartTime || '09:00').split(':').map(Number);
+        const shiftStartMinutes = startH * 60 + startM;
+
+        const [endH, endM] = (attendancePolicy.shiftEndTime || '17:00').split(':').map(Number);
+        const shiftEndMinutes = endH * 60 + endM;
+
+        attendances.forEach(att => {
+          if (att.status === 'absent') {
+            attendanceDeductions += dailyRate;
+          } else if (att.status === 'half-day' || (att.hoursWorked > 0 && att.hoursWorked < halfDayThreshold)) {
+            attendanceDeductions += (dailyRate / 2);
+          } else {
+            if (att.checkIn) {
+              const checkInMinutes = att.checkIn.getHours() * 60 + att.checkIn.getMinutes();
+              if (checkInMinutes - shiftStartMinutes > graceTime) {
+                attendanceDeductions += latePenalty;
+              }
+            }
+            if (att.checkOut) {
+              const checkOutMinutes = att.checkOut.getHours() * 60 + att.checkOut.getMinutes();
+              if (shiftEndMinutes - checkOutMinutes > 0) {
+                attendanceDeductions += earlyPenalty;
+              }
+            }
+          }
+        });
+      } else {
+        attendances.forEach(att => {
+          if (att.status === 'absent') attendanceDeductions += dailyRate;
+          else if (att.status === 'half-day') attendanceDeductions += (dailyRate / 2);
+          else if (att.status === 'late') attendanceDeductions += 200;
+        });
+      }
+
+      if (leavePolicy) {
+        const Leave = require('../models/Leave');
+        const leavesYear = await Leave.find({
+          employeeId,
+          status: 'approved',
+          startDate: { $gte: new Date(year, 0, 1) },
+          endDate: { $lte: new Date(year, 11, 31, 23, 59, 59) }
+        });
+
+        let totalExcessDays = 0;
+        const leaveTypes = ['annual', 'sick', 'casual'];
+        for (const type of leaveTypes) {
+          const takenBefore = leavesYear
+            .filter(l => l.leaveType === type && l.startDate < startDate)
+            .reduce((sum, l) => sum + l.totalDays, 0);
+
+          const takenCurrent = leavesYear
+            .filter(l => l.leaveType === type && l.startDate >= startDate && l.startDate <= endDate)
+            .reduce((sum, l) => sum + l.totalDays, 0);
+
+          const limit = leavePolicy[type + 'Leaves'] || 0;
+          const excess = Math.max(0, takenBefore + takenCurrent - limit) - Math.max(0, takenBefore - limit);
+          totalExcessDays += excess;
+        }
+        excessLeaveDeduction = totalExcessDays * (leavePolicy.deductionPerExcessLeave || 0);
+      }
     }
 
     const actualBonuses = Number(bonuses) + totalOTAmount + totalTargetBonus;
@@ -166,9 +314,8 @@ const processSalaryPayment = async (req, res, next) => {
     const epfEmployee = parseFloat((basicSalary * EPF_EMPLOYEE_RATE).toFixed(2));
     const epfEmployer = parseFloat((basicSalary * EPF_EMPLOYER_RATE).toFixed(2));
     const etfEmployer = parseFloat((basicSalary * ETF_RATE).toFixed(2));
-    const totalDeductions = epfEmployee + Number(deductions) + attendanceDeductions;
+    const totalDeductions = epfEmployee + Number(deductions) + excessLeaveDeduction + attendanceDeductions;
     const netSalary = parseFloat((grossSalary - totalDeductions).toFixed(2));
-
 
     const payroll = await Payroll.create({
       employeeId,
@@ -184,7 +331,7 @@ const processSalaryPayment = async (req, res, next) => {
       epfEmployee,
       epfEmployer,
       etfEmployer,
-      otherDeductions: Number(deductions),
+      otherDeductions: Number(deductions) + excessLeaveDeduction,
       attendanceDeductions,
       totalDeductions,
       netSalary,
@@ -362,4 +509,83 @@ const exportEmployeeSalaryReport = async (req, res, next) => {
   } catch (error) { next(error); }
 };
 
-module.exports = { calculateSalary, processSalaryPayment, getSalaryHistory, getPayrollReport, exportEmployeeSalaryReport };
+const downloadPaysheet = async (req, res, next) => {
+  try {
+    const payroll = await Payroll.findById(req.params.id)
+      .populate('employeeId', 'name email role employeeInfo')
+      .populate('storeId', 'name address phone')
+      .populate('processedBy', 'name');
+
+    if (!payroll) {
+      res.status(404);
+      return next(new Error('Payroll record not found'));
+    }
+
+    if (String(payroll.employeeId?._id) !== String(req.user._id) && !['admin', 'manager'].includes(req.user.role)) {
+      res.status(403);
+      return next(new Error('Not authorized'));
+    }
+
+    const settings = await Settings.findOne().lean();
+    const template = settings?.documentTemplates?.paysheet || {};
+    const fields = template.fields || {};
+    const PDF = loadPdfkit();
+    const doc = new PDF({ margin: 42, size: template.layout === 'compact' ? 'A5' : 'A4' });
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="paysheet-${payroll.employeeId?.name || 'employee'}-${payroll.month}-${payroll.year}.pdf"`);
+    doc.pipe(res);
+
+    const accent = template.accentColor || '#2563eb';
+    doc.rect(0, 0, doc.page.width, 72).fill(accent);
+    doc.fillColor('#ffffff').fontSize(18).text(template.title || 'Paysheet', 42, 24);
+    doc.fontSize(10).text(settings?.shopName || 'Mobile Hub', 42, 48);
+
+    doc.fillColor('#111827').moveDown(3);
+    doc.fontSize(12).text(`Period: ${payroll.month}/${payroll.year}`);
+    doc.text(`Employee: ${payroll.employeeId?.name || 'Unknown'}`);
+    if (fields.showEmployeeRole !== false) doc.text(`Role: ${payroll.employeeId?.role || 'N/A'}`);
+    if (fields.showStore !== false) doc.text(`Store: ${payroll.storeId?.name || 'N/A'}`);
+    if (fields.showProcessedBy !== false) doc.text(`Processed By: ${payroll.processedBy?.name || 'System'}`);
+    doc.moveDown(1);
+
+    const rows = [
+      ['Basic Salary', payroll.basicSalary],
+      ['Allowances', payroll.allowances],
+      ['Bonuses / OT / Targets', payroll.bonuses],
+      ['Gross Salary', payroll.grossSalary],
+      ['EPF Employee', -payroll.epfEmployee],
+      ['Other Deductions', -payroll.otherDeductions],
+      ['Attendance Deductions', -payroll.attendanceDeductions],
+      ['Net Salary', payroll.netSalary],
+    ];
+
+    rows.forEach(([label, value], index) => {
+      const isTotal = label === 'Net Salary';
+      if (isTotal) {
+        doc.moveDown(0.3);
+        doc.strokeColor(accent).lineWidth(1).moveTo(42, doc.y).lineTo(doc.page.width - 42, doc.y).stroke();
+        doc.moveDown(0.5);
+      }
+      doc.fontSize(isTotal ? 13 : 10).fillColor(isTotal ? accent : '#111827');
+      doc.text(label, 42, doc.y, { continued: true });
+      doc.text(`Rs. ${Number(value || 0).toLocaleString()}`, { align: 'right' });
+      if (index < rows.length - 1) doc.moveDown(0.45);
+    });
+
+    if (fields.showEmployerContributions !== false) {
+      doc.moveDown(1);
+      doc.fillColor('#4b5563').fontSize(10).text(`Employer EPF: Rs. ${Number(payroll.epfEmployer || 0).toLocaleString()}`);
+      doc.text(`Employer ETF: Rs. ${Number(payroll.etfEmployer || 0).toLocaleString()}`);
+    }
+
+    if (template.footerText) {
+      doc.moveDown(1.5);
+      doc.fontSize(9).fillColor('#6b7280').text(template.footerText, { align: 'center' });
+    }
+
+    doc.end();
+  } catch (error) { next(error); }
+};
+
+module.exports = { calculateSalary, processSalaryPayment, getSalaryHistory, getPayrollReport, exportEmployeeSalaryReport, downloadPaysheet };

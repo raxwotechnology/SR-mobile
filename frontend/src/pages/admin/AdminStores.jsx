@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react';
-import { Store, ToggleLeft, ToggleRight, ExternalLink, Plus, X, Edit2 } from 'lucide-react';
+import { Store, ToggleLeft, ToggleRight, ExternalLink, Plus, X, Edit2, Trash2, AlertCircle, AlertTriangle } from 'lucide-react';
 import DashboardLayout from '../../components/DashboardLayout';
-import { getAdminStores, toggleStoreStatus, createStore, updateStore } from '../../services/api';
+import { getAdminStoreSummaries, toggleStoreStatus, createStore, updateStore, deleteStore } from '../../services/api';
 import API from '../../services/api';
 import { toast } from 'react-toastify';
 import { Link } from 'react-router-dom';
 import { adminNavGroups as navItems } from './adminNavItems';
 import StockTransferModal from './StockTransferModal';
+import DeleteConfirmationModal from '../../components/DeleteConfirmationModal';
+import { getImageUrl } from '../../utils/imageHelper';
 
 const emptyForm = { name: '', description: '', address: '', city: '', phone: '', email: '', bannerImage: '', logo: '', managerId: '' };
 
@@ -19,9 +21,13 @@ const AdminStores = () => {
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
   const [showTransferModal, setShowTransferModal] = useState(false);
+  const [toggleModalOpen, setToggleModalOpen] = useState(false);
+  const [storeToToggle, setStoreToToggle] = useState(null);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [storeToDelete, setStoreToDelete] = useState(null);
 
   const fetchStores = async () => {
-    try { const { data } = await getAdminStores(); setStores(data); }
+    try { const { data } = await getAdminStoreSummaries(); setStores(data); }
     catch { toast.error('Failed to load stores'); }
     finally { setLoading(false); }
   };
@@ -33,9 +39,43 @@ const AdminStores = () => {
 
   useEffect(() => { fetchStores(); fetchManagers(); }, []);
 
-  const handleToggle = async (id) => {
-    try { await toggleStoreStatus(id); toast.success('Status updated'); fetchStores(); }
-    catch { toast.error('Failed'); }
+  const handleToggleClick = (storeId, storeName, currentStatus) => {
+    const action = currentStatus ? 'deactivate' : 'activate';
+    setStoreToToggle({ id: storeId, name: storeName, action });
+    setToggleModalOpen(true);
+  };
+
+  const handleToggleConfirm = async () => {
+    if (!storeToToggle) return;
+    try {
+      await toggleStoreStatus(storeToToggle.id);
+      toast.success(`Store ${storeToToggle.action}d successfully`);
+      fetchStores();
+    } catch {
+      toast.error('Failed to update status');
+    } finally {
+      setToggleModalOpen(false);
+      setStoreToToggle(null);
+    }
+  };
+
+  const handleDeleteClick = (store) => {
+    setStoreToDelete({ id: store._id, name: store.name });
+    setDeleteModalOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!storeToDelete) return;
+    try {
+      await deleteStore(storeToDelete.id);
+      toast.success('Store deleted successfully');
+      fetchStores();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to delete store');
+    } finally {
+      setDeleteModalOpen(false);
+      setStoreToDelete(null);
+    }
   };
 
   const openCreate = () => { setEditingId(null); setForm(emptyForm); setShowModal(true); };
@@ -80,26 +120,43 @@ const AdminStores = () => {
           {stores.map(store => (
             <div key={store._id} className={`bg-white rounded-2xl border shadow-sm overflow-hidden hover:shadow-md transition-all ${store.isActive ? 'border-card-border' : 'border-red-200 opacity-75'}`}>
               <div className="h-28 bg-gradient-to-br from-emerald-400 to-teal-500 relative">
-                {store.bannerImage && <img src={store.bannerImage} alt="" className="w-full h-full object-cover" />}
+                {store.bannerImage && <img src={getImageUrl(store.bannerImage)} alt="" className="w-full h-full object-cover" />}
                 <span className={`absolute top-3 right-3 text-xs font-semibold px-3 py-1 rounded-full ${store.isActive ? 'bg-emerald-500 text-white' : 'bg-red-500 text-white'}`}>
                   {store.isActive ? 'Active' : 'Inactive'}
                 </span>
               </div>
               <div className="p-5">
                 <div className="flex items-center gap-3 mb-3">
-                  {store.logo ? <img src={store.logo} alt="" className="w-10 h-10 rounded-xl object-cover" /> : <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center"><Store size={18} className="text-primary-blue" /></div>}
+                  {store.logo ? <img src={getImageUrl(store.logo)} alt="" className="w-10 h-10 rounded-xl object-cover" /> : <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center"><Store size={18} className="text-primary-blue" /></div>}
                   <div><h3 className="font-semibold text-dark-navy">{store.name}</h3><p className="text-xs text-muted-text">{store.city || 'No city'}</p></div>
                 </div>
+
+                <div className="grid grid-cols-2 gap-2 mb-3 bg-gray-50 rounded-xl p-3 border border-gray-100">
+                  <div>
+                    <p className="text-[10px] uppercase font-bold text-muted-text">Items in Stock</p>
+                    <p className="text-sm font-bold text-dark-navy">{(store.totalStock || 0).toLocaleString()} <span className="text-[10px] font-normal text-muted-text">({store.totalProducts || 0} unique)</span></p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase font-bold text-muted-text">Stock Value</p>
+                    <p className="text-sm font-bold text-emerald-600">Rs. {(store.totalStockValue || 0).toLocaleString()}</p>
+                  </div>
+                  <div className="col-span-2 mt-1 pt-2 border-t border-gray-200">
+                    <p className="text-[10px] uppercase font-bold text-muted-text">Bank & Cash Assets</p>
+                    <p className="text-sm font-bold text-blue-600">Rs. {(store.totalAssets || 0).toLocaleString()}</p>
+                  </div>
+                </div>
+
                 <div className="text-xs text-muted-text space-y-1 mb-4">
                   <p><span className="font-medium text-dark-navy">Manager:</span> {store.managerId?.name || 'N/A'}</p>
                   <p><span className="font-medium text-dark-navy">Phone:</span> {store.phone || '—'}</p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <button onClick={() => handleToggle(store._id)} className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold flex-1 justify-center ${store.isActive ? 'bg-red-50 text-red-600 hover:bg-red-100' : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100'}`}>
+                  <button onClick={() => handleToggleClick(store._id, store.name, store.isActive)} className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold flex-1 justify-center ${store.isActive ? 'bg-red-50 text-red-600 hover:bg-red-100' : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100'}`}>
                     {store.isActive ? <><ToggleRight size={16} /> Deactivate</> : <><ToggleLeft size={16} /> Activate</>}
                   </button>
-                  <button onClick={() => openEdit(store)} className="p-2 rounded-xl border border-card-border hover:bg-blue-50 text-blue-500"><Edit2 size={14} /></button>
-                  <Link to={`/store/${store._id}`} className="p-2 rounded-xl border border-card-border hover:bg-gray-50"><ExternalLink size={14} className="text-muted-text" /></Link>
+                  <button onClick={() => openEdit(store)} className="p-2 rounded-xl border border-card-border hover:bg-blue-50 text-blue-500" title="Edit Store"><Edit2 size={14} /></button>
+                  <button onClick={() => handleDeleteClick(store)} className="p-2 rounded-xl border border-card-border hover:bg-red-50 text-red-500 animate-pulse hover:animate-none" title="Delete Store"><Trash2 size={14} /></button>
+                  <Link to={`/store/${store._id}`} className="p-2 rounded-xl border border-card-border hover:bg-gray-50" title="Open Store Dashboard"><ExternalLink size={14} className="text-muted-text" /></Link>
                 </div>
               </div>
             </div>
@@ -183,6 +240,53 @@ const AdminStores = () => {
         isOpen={showTransferModal} 
         onClose={() => setShowTransferModal(false)} 
         stores={stores.filter(s => s.isActive)} 
+      />
+
+      {/* Toggle Status Confirmation Modal */}
+      {toggleModalOpen && storeToToggle && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[110] flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl border border-slate-100 transform transition-all duration-300 scale-100 p-6" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-3 mb-4">
+              <div className={`p-3 rounded-2xl ${storeToToggle.action === 'deactivate' ? 'bg-red-50 text-red-600' : 'bg-emerald-50 text-emerald-600'}`}>
+                <AlertCircle size={24} />
+              </div>
+              <div>
+                <h3 className="font-extrabold text-slate-900 text-lg capitalize">{storeToToggle.action} Store</h3>
+                <p className="text-xs text-slate-500 font-medium">Confirm status change</p>
+              </div>
+            </div>
+            
+            <p className="text-sm text-slate-600 font-medium mb-6">
+              Are you sure you want to <span className="font-bold text-slate-800">{storeToToggle.action}</span> the store <span className="font-bold text-dark-navy">"{storeToToggle.name}"</span>?
+            </p>
+            
+            <div className="flex justify-end gap-3">
+              <button 
+                type="button" 
+                onClick={() => { setToggleModalOpen(false); setStoreToToggle(null); }} 
+                className="px-5 py-2.5 font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-all text-sm"
+              >
+                Cancel
+              </button>
+              <button 
+                type="button" 
+                onClick={handleToggleConfirm} 
+                className={`px-6 py-2.5 text-white font-bold rounded-xl shadow-md transition-all text-sm ${
+                  storeToToggle.action === 'deactivate' ? 'bg-red-600 hover:bg-red-700 shadow-red-200' : 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200'
+                }`}
+              >
+                Yes, Confirm
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <DeleteConfirmationModal
+        isOpen={deleteModalOpen}
+        onClose={() => { setDeleteModalOpen(false); setStoreToDelete(null); }}
+        onConfirm={handleDeleteConfirm}
+        itemName={storeToDelete?.name}
       />
     </DashboardLayout>
   );

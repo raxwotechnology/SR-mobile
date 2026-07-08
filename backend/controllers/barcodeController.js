@@ -7,7 +7,7 @@ const Settings = require('../models/Settings');
 // @access  Private (admin, manager, cashier — permission-gated)
 const generateBarcode = async (req, res, next) => {
   try {
-    const { productId, quantity = 1 } = req.body;
+    const { productId, quantity = 1, printerName = 'Default Printer' } = req.body;
 
     if (!productId) {
       res.status(400);
@@ -51,6 +51,7 @@ const generateBarcode = async (req, res, next) => {
       generatedBy: req.user._id,
       generatedByName: req.user.name,
       generatedByRole: req.user.role,
+      printerName,
     });
 
     res.status(201).json({

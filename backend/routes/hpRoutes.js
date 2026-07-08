@@ -6,7 +6,8 @@ const {
   getHPById,
   recordHPPayment,
   getCustomerHistory,
-  getAllCustomers
+  getAllCustomers,
+  deleteHPRecord
 } = require('../controllers/hpController');
 
 router.use(protect);
@@ -18,7 +19,8 @@ router.get('/customers/all', getAllCustomers);
 router.get('/customer/:phone/history', getCustomerHistory);
 
 router.route('/:id')
-  .get(getHPById);
+  .get(getHPById)
+  .delete(authorize('admin'), deleteHPRecord);
 
 router.post('/:id/payments', recordHPPayment);
 

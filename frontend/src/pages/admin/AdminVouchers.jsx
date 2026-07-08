@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Ticket, Plus, Edit2, Trash2, X, Search, Copy, Check, FileText, Printer } from 'lucide-react';
+import { Plus, Edit2, Trash2, X, Search, Ticket, Copy, Check, Printer, FileText } from 'lucide-react';
 import DashboardLayout from '../../components/DashboardLayout';
 import API from '../../services/api';
 import { toast } from 'react-toastify';
 import { adminNavGroups as navItems } from './adminNavItems';
+import DeleteConfirmationModal from '../../components/DeleteConfirmationModal';
 import useSettingsStore from '../../store/settingsStore';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -75,7 +76,6 @@ const AdminVouchers = () => {
         const { data } = await API.get('/loyalty/vouchers/admin');
         setVouchers(data || []);
       } catch (adminErr) {
-        // Backward-compatible fallback in case backend is not restarted yet.
         const { data } = await API.get('/loyalty/vouchers');
         setVouchers(data || []);
       }
@@ -139,11 +139,21 @@ const AdminVouchers = () => {
     }
   };
 
-  const handleDelete = async (id) => {
-    if (!window.confirm('Delete this voucher?')) return;
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState(null);
+
+  const handleDeleteClick = (v) => {
+    setItemToDelete({ id: v._id, name: v.code });
+    setDeleteModalOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!itemToDelete) return;
     try {
-      await API.delete(`/loyalty/vouchers/${id}`);
+      await API.delete(`/loyalty/vouchers/${itemToDelete.id}`);
       toast.success('Voucher deleted');
+      setDeleteModalOpen(false);
+      setItemToDelete(null);
       fetchVouchers();
     } catch (err) {
       toast.error('Failed to delete');
@@ -285,7 +295,7 @@ const AdminVouchers = () => {
                     </button>
                   </div>
                   <button onClick={() => openEdit(v)} className="p-2 rounded-lg hover:bg-blue-50 text-blue-500 transition-colors" title="Edit"><Edit2 size={16} /></button>
-                  <button onClick={() => handleDelete(v._id)} className="p-2 rounded-lg hover:bg-red-50 text-red-500 transition-colors" title="Delete"><Trash2 size={16} /></button>
+                  <button onClick={() => handleDeleteClick(v)} className="p-2 rounded-lg hover:bg-red-50 text-red-500 transition-colors" title="Delete"><Trash2 size={16} /></button>
                 </div>
               </div>
 
@@ -322,7 +332,6 @@ const AdminVouchers = () => {
         </div>
       </div>
 
-      {/* Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[100] flex items-center justify-center p-4" onClick={() => setShowModal(false)}>
           <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl" onClick={(e) => e.stopPropagation()}>
@@ -396,6 +405,13 @@ const AdminVouchers = () => {
           </div>
         </div>
       )}
+
+      <DeleteConfirmationModal
+        isOpen={deleteModalOpen}
+        onClose={() => { setDeleteModalOpen(false); setItemToDelete(null); }}
+        onConfirm={handleDeleteConfirm}
+        itemName={itemToDelete?.name}
+      />
     </DashboardLayout>
   );
 };

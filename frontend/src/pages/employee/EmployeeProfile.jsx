@@ -1,16 +1,18 @@
 import { useState, useEffect } from 'react';
-import { LayoutDashboard, User, Clock, Calendar, CreditCard, Mail, Phone, MapPin, Building, Save } from 'lucide-react';
+import { LayoutDashboard, User, Clock, Calendar, CreditCard, Mail, Phone, MapPin, Building, Save, Trash2 } from 'lucide-react';
 import DashboardLayout from '../../components/DashboardLayout';
 import useAuthStore from '../../store/authStore';
 import { getEmployeeNavGroups } from './employeeNav';
 import API, { uploadImage } from '../../services/api';
 import { toast } from 'react-toastify';
+import { getImageUrl } from '../../utils/imageHelper';
 
 const EmployeeProfile = () => {
   const { user, setUser } = useAuthStore();
   const [phone, setPhone] = useState(user?.phone || '');
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const roleLabel = user?.role === 'deliveryGuy' ? 'Delivery Rider' : user?.role === 'cashier' ? 'Cashier' : user?.role;
 
@@ -45,6 +47,19 @@ const EmployeeProfile = () => {
     }
   };
 
+  const handleRemoveAvatar = async () => {
+    setUploading(true);
+    try {
+      const { data: profileData } = await API.put('/auth/profile', { avatar: '' });
+      setUser(profileData);
+      toast.success('Profile photo removed!');
+    } catch (err) {
+      toast.error('Failed to remove photo');
+    } finally {
+      setUploading(false);
+    }
+  };
+
   return (
     <DashboardLayout navItems={getEmployeeNavGroups(user?.role)} title="Employee Portal">
       <div className="max-w-3xl space-y-6">
@@ -55,7 +70,17 @@ const EmployeeProfile = () => {
           <div className="flex items-center gap-6 relative z-10">
             <div className="relative group">
               {user?.avatar ? (
-                <img src={user.avatar} alt="Profile" className="w-24 h-24 rounded-2xl object-cover border-4 border-white/20 shadow-md" />
+                <>
+                  <img src={getImageUrl(user.avatar)} alt="Profile" className="w-24 h-24 rounded-2xl object-cover border-4 border-white/20 shadow-md" />
+                  <button
+                    type="button"
+                    onClick={() => setShowDeleteConfirm(true)}
+                    className="absolute -top-2 -right-2 bg-red-500 hover:bg-red-600 text-white p-1.5 rounded-full shadow-md z-20 transition-all hover:scale-110"
+                    title="Delete Photo"
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                </>
               ) : (
                 <div className="w-24 h-24 bg-white/20 rounded-2xl flex items-center justify-center text-4xl font-bold backdrop-blur-sm border-4 border-white/20 shadow-md">
                   {user?.name?.charAt(0)?.toUpperCase()}
@@ -157,6 +182,39 @@ const EmployeeProfile = () => {
           </div>
         </div>
       </div>
+
+      {showDeleteConfirm && (
+         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+           <div className="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl border border-slate-100 p-6 space-y-4">
+             <div className="text-center space-y-2">
+               <div className="w-12 h-12 bg-red-50 text-red-500 rounded-full flex items-center justify-center mx-auto mb-2 text-xl">
+                 ⚠️
+               </div>
+               <h3 className="font-extrabold text-slate-900 text-lg">Delete Profile Photo</h3>
+               <p className="text-sm text-slate-500">Are you sure you want to permanently delete your profile photo?</p>
+             </div>
+             <div className="flex gap-3 justify-center pt-2">
+               <button
+                 type="button"
+                 onClick={() => setShowDeleteConfirm(false)}
+                 className="flex-1 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold hover:bg-slate-50 text-slate-600 transition-colors"
+               >
+                 Cancel
+               </button>
+               <button
+                 type="button"
+                 onClick={() => {
+                   setShowDeleteConfirm(false);
+                   handleRemoveAvatar();
+                 }}
+                 className="flex-1 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm font-bold shadow-md transition-colors"
+               >
+                 Delete
+               </button>
+             </div>
+           </div>
+         </div>
+       )}
     </DashboardLayout>
   );
 };

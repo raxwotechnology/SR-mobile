@@ -4,6 +4,7 @@ import DashboardLayout from '../../components/DashboardLayout';
 import { getCategories, createCategory, updateCategory, deleteCategory } from '../../services/api';
 import { toast } from 'react-toastify';
 import { adminNavGroups as navItems } from './adminNavItems';
+import DeleteConfirmationModal from '../../components/DeleteConfirmationModal';
 
 const AdminCategories = () => {
   const [categories, setCategories] = useState([]);
@@ -12,6 +13,10 @@ const AdminCategories = () => {
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState({ name: '', icon: '', image: '' });
   const [saving, setSaving] = useState(false);
+
+  // Deletion States
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState(null);
 
   const fetchCategories = async () => {
     try {
@@ -58,10 +63,15 @@ const AdminCategories = () => {
     }
   };
 
-  const handleDelete = async (id) => {
-    if (!window.confirm('Delete this category?')) return;
+  const handleDeleteClick = (cat) => {
+    setItemToDelete({ id: cat._id, name: cat.name });
+    setDeleteModalOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!itemToDelete) return;
     try {
-      await deleteCategory(id);
+      await deleteCategory(itemToDelete.id);
       toast.success('Category deleted');
       fetchCategories();
     } catch (err) {
@@ -123,7 +133,7 @@ const AdminCategories = () => {
                     <Edit2 size={14} /> Edit
                   </button>
                   <button
-                    onClick={() => handleDelete(cat._id)}
+                    onClick={() => handleDeleteClick(cat)}
                     className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-semibold text-red-500 bg-red-50 hover:bg-red-100 transition-colors"
                   >
                     <Trash2 size={14} /> Delete
@@ -174,6 +184,13 @@ const AdminCategories = () => {
           </div>
         </div>
       )}
+
+      <DeleteConfirmationModal
+        isOpen={deleteModalOpen}
+        onClose={() => { setDeleteModalOpen(false); setItemToDelete(null); }}
+        onConfirm={handleDeleteConfirm}
+        itemName={itemToDelete?.name}
+      />
     </DashboardLayout>
   );
 };

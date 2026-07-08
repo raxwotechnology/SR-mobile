@@ -16,6 +16,8 @@ const StockTransferModal = ({ isOpen, onClose, stores }) => {
   const [trackingNumber, setTrackingNumber] = useState('');
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [transferType, setTransferType] = useState('cash');
+  const [amountPaid, setAmountPaid] = useState('');
 
   useEffect(() => {
     if (isOpen) {
@@ -28,6 +30,8 @@ const StockTransferModal = ({ isOpen, onClose, stores }) => {
       setQuantity('');
       setNotes('');
       setTrackingNumber('');
+      setTransferType('cash');
+      setAmountPaid('');
     }
   }, [isOpen]);
 
@@ -52,15 +56,11 @@ const StockTransferModal = ({ isOpen, onClose, stores }) => {
   const fetchProducts = async (storeId) => {
     setLoading(true);
     try {
-      console.log('Fetching products for storeId:', storeId);
       const { data } = await getAdminProducts({ storeId });
-      console.log('Response data:', data);
       const productsList = Array.isArray(data) ? data : (data.products || []);
-      console.log('Products mapped:', productsList);
       setProducts(productsList);
       setFilteredProducts(productsList);
     } catch (error) {
-      console.error('Error fetching products:', error);
       toast.error('Failed to load products for store');
     } finally {
       setLoading(false);
@@ -76,6 +76,9 @@ const StockTransferModal = ({ isOpen, onClose, stores }) => {
     setSelectedProduct('');
   }, [selectedCategory, products]);
 
+  const selectedProductObj = products.find(p => p._id === selectedProduct);
+  const totalValuation = selectedProductObj && quantity ? (selectedProductObj.price * Number(quantity)) : 0;
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!fromStore || !toStore || !selectedProduct || !quantity) {
@@ -85,7 +88,7 @@ const StockTransferModal = ({ isOpen, onClose, stores }) => {
       return toast.error('Source and Destination stores cannot be the same');
     }
 
-    const maxStock = products.find(p => p._id === selectedProduct)?.stock || 0;
+    const maxStock = selectedProductObj?.stock || 0;
     if (Number(quantity) > maxStock) {
       return toast.error(`Insufficient stock! Maximum available is ${maxStock}`);
     }
@@ -97,7 +100,9 @@ const StockTransferModal = ({ isOpen, onClose, stores }) => {
         toStore,
         products: [{ productId: selectedProduct, quantity: Number(quantity) }],
         notes,
-        trackingNumber
+        trackingNumber,
+        transferType,
+        amountPaid: transferType === 'credit' ? Number(amountPaid || 0) : totalValuation
       });
       // Automatically complete the transfer so stock appears in destination store instantly
       await updateStockTransferStatus(res.data._id, { status: 'completed' });
@@ -115,7 +120,7 @@ const StockTransferModal = ({ isOpen, onClose, stores }) => {
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[100] flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl" onClick={e => e.stopPropagation()}>
+      <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl overflow-y-auto max-h-[90vh]" onClick={e => e.stopPropagation()}>
         <div className="px-6 py-4 border-b border-card-border flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-primary-blue/10 flex items-center justify-center text-primary-blue">
@@ -134,7 +139,7 @@ const StockTransferModal = ({ isOpen, onClose, stores }) => {
             {/* Source Store */}
             <div>
               <label className="block text-sm font-semibold text-dark-navy mb-1.5">From Branch (Source) *</label>
-              <select required value={fromStore} onChange={e => setFromStore(e.target.value)} className="w-full border border-card-border rounded-xl py-2.5 px-4 text-sm focus:ring-2 focus:ring-primary-blue">
+              <select required value={fromStore} onChange={e => setFromStore(e.target.value)} className="w-full border border-card-border rounded-xl py-2.5 px-4 text-sm focus:ring-2 focus:ring-primary-blue bg-white">
                 <option value="">Select source branch...</option>
                 {stores.map(s => <option key={s._id} value={s._id}>{s.name}</option>)}
               </select>
@@ -145,7 +150,7 @@ const StockTransferModal = ({ isOpen, onClose, stores }) => {
                 <ArrowRight size={14} className="text-primary-blue" />
                 To Branch (Destination) *
               </label>
-              <select required value={toStore} onChange={e => setToStore(e.target.value)} className="w-full border border-card-border rounded-xl py-2.5 px-4 text-sm focus:ring-2 focus:ring-primary-blue">
+              <select required value={toStore} onChange={e => setToStore(e.target.value)} className="w-full border border-card-border rounded-xl py-2.5 px-4 text-sm focus:ring-2 focus:ring-primary-blue bg-white">
                 <option value="">Select destination branch...</option>
                 {stores.filter(s => s._id !== fromStore).map(s => <option key={s._id} value={s._id}>{s.name}</option>)}
               </select>
@@ -157,35 +162,74 @@ const StockTransferModal = ({ isOpen, onClose, stores }) => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-semibold text-muted-text mb-1.5">Filter by Category</label>
-                <select value={selectedCategory} onChange={e => setSelectedCategory(e.target.value)} className="w-full border border-card-border rounded-lg py-2 px-3 text-sm">
+                <select value={selectedCategory} onChange={e => setSelectedCategory(e.target.value)} className="w-full border border-card-border rounded-lg py-2 px-3 text-sm bg-white">
                   <option value="">All Categories</option>
                   {categories.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
                 </select>
               </div>
               <div className="md:col-span-2">
                 <label className="block text-xs font-semibold text-muted-text mb-1.5">Select Product *</label>
-                <select required value={selectedProduct} onChange={e => setSelectedProduct(e.target.value)} disabled={loading || !fromStore} className="w-full border border-card-border rounded-lg py-2 px-3 text-sm disabled:opacity-50">
+                <select required value={selectedProduct} onChange={e => setSelectedProduct(e.target.value)} disabled={loading || !fromStore} className="w-full border border-card-border rounded-lg py-2 px-3 text-sm disabled:opacity-50 bg-white">
                   <option value="">{loading ? 'Loading...' : !fromStore ? 'Select source store first' : 'Select a product...'}</option>
                   {filteredProducts.map(p => (
-                    <option key={p._id} value={p._id}>{p.name} (Available: {p.stock} {p.unit || 'units'})</option>
+                    <option key={p._id} value={p._id}>{p.name} (Available: {p.stock} {p.unit || 'units'} - Price: Rs. {p.price.toLocaleString()})</option>
                   ))}
                 </select>
               </div>
               <div>
                 <label className="block text-xs font-semibold text-muted-text mb-1.5">Quantity to Transfer *</label>
-                <input type="number" required min="1" max={selectedProduct ? products.find(p => p._id === selectedProduct)?.stock : undefined} value={quantity} onChange={e => setQuantity(e.target.value)} placeholder="e.g. 5" className="w-full border border-card-border rounded-lg py-2 px-3 text-sm focus:ring-2 focus:ring-primary-blue" />
+                <input type="number" required min="1" max={selectedProduct ? selectedProductObj?.stock : undefined} value={quantity} onChange={e => setQuantity(e.target.value)} placeholder="e.g. 5" className="w-full border border-card-border rounded-lg py-2 px-3 text-sm focus:ring-2 focus:ring-primary-blue bg-white" />
               </div>
+            </div>
+          </div>
+
+          {/* Payment & Transfer Method */}
+          <div className="border border-card-border rounded-xl p-4 mb-6 bg-slate-50">
+            <h3 className="text-sm font-bold text-dark-navy mb-3">💰 Transfer Valuation & Payment</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-muted-text mb-1.5">Transfer Mode *</label>
+                <select value={transferType} onChange={e => setTransferType(e.target.value)} className="w-full border border-card-border rounded-lg py-2 px-3 text-sm bg-white">
+                  <option value="cash">Cash (Paid Instantly)</option>
+                  <option value="credit">Credit (Track Balance)</option>
+                </select>
+              </div>
+              <div>
+                <span className="block text-xs font-semibold text-muted-text mb-1.5">Total Transfer Value:</span>
+                <span className="block text-lg font-bold text-dark-navy pt-1.5">Rs. {totalValuation.toLocaleString()}</span>
+              </div>
+              
+              {transferType === 'credit' && (
+                <>
+                  <div>
+                    <label className="block text-xs font-semibold text-muted-text mb-1.5">Amount Paid Now (Rs.)</label>
+                    <input 
+                      type="number" 
+                      min="0"
+                      max={totalValuation}
+                      value={amountPaid} 
+                      onChange={e => setAmountPaid(e.target.value)} 
+                      placeholder="0.00" 
+                      className="w-full border border-card-border rounded-lg py-2 px-3 text-sm focus:ring-2 focus:ring-primary-blue bg-white" 
+                    />
+                  </div>
+                  <div>
+                    <span className="block text-xs font-semibold text-muted-text mb-1.5">Outstanding Balance:</span>
+                    <span className="block text-lg font-bold text-red-600 pt-1.5">Rs. {(totalValuation - Number(amountPaid || 0)).toLocaleString()}</span>
+                  </div>
+                </>
+              )}
             </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
             <div>
               <label className="block text-sm font-semibold text-dark-navy mb-1.5">Tracking Number (Optional)</label>
-              <input value={trackingNumber} onChange={e => setTrackingNumber(e.target.value)} placeholder="e.g. TR-10294" className="w-full border border-card-border rounded-xl py-2 px-4 text-sm focus:ring-2 focus:ring-primary-blue" />
+              <input value={trackingNumber} onChange={e => setTrackingNumber(e.target.value)} placeholder="e.g. TR-10294" className="w-full border border-card-border rounded-xl py-2 px-4 text-sm focus:ring-2 focus:ring-primary-blue bg-white" />
             </div>
             <div className="md:col-span-2">
               <label className="block text-sm font-semibold text-dark-navy mb-1.5">Transfer Notes & Details</label>
-              <textarea value={notes} onChange={e => setNotes(e.target.value)} rows="2" placeholder="Relevant details about this transfer..." className="w-full border border-card-border rounded-xl py-2 px-4 text-sm resize-none focus:ring-2 focus:ring-primary-blue" />
+              <textarea value={notes} onChange={e => setNotes(e.target.value)} rows="2" placeholder="Relevant details about this transfer..." className="w-full border border-card-border rounded-xl py-2 px-4 text-sm resize-none focus:ring-2 focus:ring-primary-blue bg-white" />
             </div>
           </div>
 
