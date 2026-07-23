@@ -1,9 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
-<<<<<<< HEAD
 import { Download, FileText, FileSpreadsheet, Filter, Store as StoreIcon, Clock, CheckCircle, X, Plus, Edit2, Trash2, ShieldAlert, AlertCircle } from 'lucide-react';
-=======
-import { Download, FileText, FileSpreadsheet, Filter, Store as StoreIcon, Clock, CheckCircle, X, Plus, Edit2, Trash2, ShieldAlert } from 'lucide-react';
->>>>>>> 6e38bb6df289ec2e0085cc7a6d886a1f493448a9
+
 import DashboardLayout from '../../components/DashboardLayout';
 import {
   getAttendanceReport, getEmployees, getStores, adminMarkAttendance,
@@ -56,10 +53,8 @@ const AdminAttendance = () => {
 
   // Assign Policy Modal State
   const [showAssignModal, setShowAssignModal] = useState(false);
-<<<<<<< HEAD
   const [showBulkAssignConfirm, setShowBulkAssignConfirm] = useState(false);
-=======
->>>>>>> 6e38bb6df289ec2e0085cc7a6d886a1f493448a9
+
   const [assignForm, setAssignForm] = useState({
     employeeId: '',
     employeeName: '',
@@ -213,7 +208,6 @@ const AdminAttendance = () => {
   };
 
   const handleSaveAssignment = async (e) => {
-<<<<<<< HEAD
     if (e) e.preventDefault();
     if (assignForm.employeeId === 'all' && !showBulkAssignConfirm) {
       setShowBulkAssignConfirm(true);
@@ -221,20 +215,13 @@ const AdminAttendance = () => {
     }
     try {
       if (assignForm.employeeId === 'all') {
-=======
-    e.preventDefault();
-    try {
-      if (assignForm.employeeId === 'all') {
-        if (!window.confirm("Are you sure you want to assign this policy to all employees? This will overwrite their current individual policies.")) return;
->>>>>>> 6e38bb6df289ec2e0085cc7a6d886a1f493448a9
+
         await assignPoliciesToAllEmployees({
           attendancePolicyId: assignForm.attendancePolicyId || null
         });
         toast.success('Attendance policy assigned to all employees successfully');
-<<<<<<< HEAD
         setShowBulkAssignConfirm(false);
-=======
->>>>>>> 6e38bb6df289ec2e0085cc7a6d886a1f493448a9
+
       } else {
         await assignPoliciesToEmployee({
           employeeId: assignForm.employeeId,
@@ -484,101 +471,9 @@ const AdminAttendance = () => {
           </>
         )}
 
-<<<<<<< HEAD
 
         {activeTab === 'attendance-policies' && (
-=======
-        {activeTab === 'leave-policies' && (
->>>>>>> 6e38bb6df289ec2e0085cc7a6d886a1f493448a9
-          <div className="space-y-6">
-            {policiesLoading ? (
-              <div className="flex items-center justify-center h-48">
-                <div className="w-8 h-8 border-3 border-primary-blue border-t-transparent rounded-full animate-spin" />
-              </div>
-<<<<<<< HEAD
-            ) : attendancePolicies.length === 0 ? (
-              <div className="bg-white rounded-2xl border border-card-border p-12 text-center text-muted-text">
-                No attendance policies found. Click "Create Attendance Policy" to add one.
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                {attendancePolicies.map(p => (
-=======
-            ) : leavePolicies.length === 0 ? (
-              <div className="bg-white rounded-2xl border border-card-border p-12 text-center text-muted-text">
-                No leave policies found. Click "Create Leave Policy" to add one.
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                {leavePolicies.map(p => (
->>>>>>> 6e38bb6df289ec2e0085cc7a6d886a1f493448a9
-                  <div key={p._id} className="bg-white rounded-2xl border border-card-border p-5 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden flex flex-col justify-between">
-                    {p.isDefault && (
-                      <div className="absolute top-0 right-0 bg-emerald-500 text-white text-[10px] font-bold px-3 py-1 rounded-bl-xl uppercase tracking-wider">
-                        Default
-                      </div>
-                    )}
-                    <div>
-                      <h3 className="font-bold text-dark-navy text-lg mb-4 pr-16">{p.name}</h3>
-                      <div className="space-y-2.5 text-sm text-gray-600 mb-6">
-                        <div className="flex justify-between border-b border-gray-50 pb-1.5">
-<<<<<<< HEAD
-                          <span>⏰ Shift Schedule</span>
-                          <span className="font-semibold text-dark-navy">{p.shiftStartTime} - {p.shiftEndTime}</span>
-                        </div>
-                        <div className="flex justify-between border-b border-gray-50 pb-1.5">
-                          <span>⏱️ Late Grace Period</span>
-                          <span className="font-semibold text-dark-navy">{p.graceTimeMinutes} mins</span>
-                        </div>
-                        <div className="flex justify-between border-b border-gray-50 pb-1.5">
-                          <span>⚠️ Late Check-in Fine</span>
-                          <span className="font-semibold text-red-500">Rs. {p.lateArrivalPenalty.toLocaleString()}</span>
-                        </div>
-                        <div className="flex justify-between border-b border-gray-50 pb-1.5">
-                          <span>🚶 Early Checkout Fine</span>
-                          <span className="font-semibold text-red-500">Rs. {p.earlyCheckoutPenalty.toLocaleString()}</span>
-                        </div>
-                        <div className="flex justify-between border-b border-gray-50 pb-1.5">
-                          <span>⚖️ Half-Day Threshold</span>
-                          <span className="font-semibold text-dark-navy">&lt; {p.halfDayThresholdHours} working hours</span>
-=======
-                          <span>🌴 Annual Leaves</span>
-                          <span className="font-semibold text-dark-navy">{p.annualLeaves} days</span>
-                        </div>
-                        <div className="flex justify-between border-b border-gray-50 pb-1.5">
-                          <span>🤒 Sick Leaves</span>
-                          <span className="font-semibold text-dark-navy">{p.sickLeaves} days</span>
-                        </div>
-                        <div className="flex justify-between border-b border-gray-50 pb-1.5">
-                          <span>🏖️ Casual Leaves</span>
-                          <span className="font-semibold text-dark-navy">{p.casualLeaves} days</span>
-                        </div>
-                        <div className="flex justify-between border-b border-gray-50 pb-1.5">
-                          <span>💸 Excess Leave Penalty</span>
-                          <span className="font-semibold text-red-500">Rs. {p.deductionPerExcessLeave.toLocaleString()} / day</span>
->>>>>>> 6e38bb6df289ec2e0085cc7a6d886a1f493448a9
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex gap-2 border-t border-gray-50 pt-4 mt-auto">
-<<<<<<< HEAD
-                      <button onClick={() => openEditAttendance(p)} className="flex-1 bg-gray-50 hover:bg-gray-100 text-gray-700 py-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors border border-gray-200"><Edit2 size={12} /> Edit</button>
-                      <button onClick={() => handlePolicyDeleteClick(p, 'attendance')} className="flex-1 bg-red-50 hover:bg-red-100 text-red-600 py-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors border border-red-100"><Trash2 size={12} /> Delete</button>
-=======
-                      <button onClick={() => openEditLeave(p)} className="flex-1 bg-gray-50 hover:bg-gray-100 text-gray-700 py-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors border border-gray-200"><Edit2 size={12} /> Edit</button>
-                      <button onClick={() => handlePolicyDeleteClick(p, 'leave')} className="flex-1 bg-red-50 hover:bg-red-100 text-red-600 py-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors border border-red-100"><Trash2 size={12} /> Delete</button>
->>>>>>> 6e38bb6df289ec2e0085cc7a6d886a1f493448a9
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
 
-<<<<<<< HEAD
-=======
-        {activeTab === 'attendance-policies' && (
           <div className="space-y-6">
             {policiesLoading ? (
               <div className="flex items-center justify-center h-48">
@@ -591,6 +486,7 @@ const AdminAttendance = () => {
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
                 {attendancePolicies.map(p => (
+
                   <div key={p._id} className="bg-white rounded-2xl border border-card-border p-5 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden flex flex-col justify-between">
                     {p.isDefault && (
                       <div className="absolute top-0 right-0 bg-emerald-500 text-white text-[10px] font-bold px-3 py-1 rounded-bl-xl uppercase tracking-wider">
@@ -619,12 +515,14 @@ const AdminAttendance = () => {
                         <div className="flex justify-between border-b border-gray-50 pb-1.5">
                           <span>⚖️ Half-Day Threshold</span>
                           <span className="font-semibold text-dark-navy">&lt; {p.halfDayThresholdHours} working hours</span>
+
                         </div>
                       </div>
                     </div>
                     <div className="flex gap-2 border-t border-gray-50 pt-4 mt-auto">
                       <button onClick={() => openEditAttendance(p)} className="flex-1 bg-gray-50 hover:bg-gray-100 text-gray-700 py-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors border border-gray-200"><Edit2 size={12} /> Edit</button>
                       <button onClick={() => handlePolicyDeleteClick(p, 'attendance')} className="flex-1 bg-red-50 hover:bg-red-100 text-red-600 py-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors border border-red-100"><Trash2 size={12} /> Delete</button>
+
                     </div>
                   </div>
                 ))}
@@ -633,7 +531,7 @@ const AdminAttendance = () => {
           </div>
         )}
 
->>>>>>> 6e38bb6df289ec2e0085cc7a6d886a1f493448a9
+
         {activeTab === 'assign-policies' && (
           <div className="space-y-4">
             <div className="flex flex-col sm:flex-row justify-between sm:items-center bg-white p-5 rounded-2xl border border-card-border shadow-sm gap-4">
@@ -934,7 +832,6 @@ const AdminAttendance = () => {
         onConfirm={handlePolicyDeleteConfirm}
         itemName={policyToDelete?.name}
       />
-<<<<<<< HEAD
 
       {/* Bulk Assign Confirmation Modal */}
       {showBulkAssignConfirm && (
@@ -973,8 +870,7 @@ const AdminAttendance = () => {
           </div>
         </div>
       )}
-=======
->>>>>>> 6e38bb6df289ec2e0085cc7a6d886a1f493448a9
+
     </DashboardLayout>
   );
 };

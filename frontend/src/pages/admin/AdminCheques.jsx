@@ -1,10 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Landmark, Search, Calendar, Filter, CheckCircle2, XCircle, Clock, AlertCircle, FileText, Building, Trash2, X, Plus } from 'lucide-react';
 import DashboardLayout from '../../components/DashboardLayout';
-<<<<<<< HEAD
 import DeleteConfirmationModal from '../../components/DeleteConfirmationModal';
-=======
->>>>>>> 6e38bb6df289ec2e0085cc7a6d886a1f493448a9
+
 import { getCheques, updateChequeStatus, deleteTransaction, getStores, getAccounts, createTransaction } from '../../services/api';
 import { toast } from 'react-toastify';
 import { adminNavGroups as navItems } from './adminNavItems';
@@ -18,11 +16,9 @@ const AdminCheques = () => {
 
   // Manual Cheque States
   const [showModal, setShowModal] = useState(false);
-<<<<<<< HEAD
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState(null);
-=======
->>>>>>> 6e38bb6df289ec2e0085cc7a6d886a1f493448a9
+
   const [stores, setStores] = useState([]);
   const [accounts, setAccounts] = useState([]);
   const [saving, setSaving] = useState(false);
@@ -84,7 +80,6 @@ const AdminCheques = () => {
     }
   };
 
-<<<<<<< HEAD
   const handleDeleteClick = (cheque) => {
     setItemToDelete(cheque);
     setDeleteModalOpen(true);
@@ -93,12 +88,7 @@ const AdminCheques = () => {
   const handleDeleteConfirm = async () => {
     try {
       await deleteTransaction(itemToDelete._id);
-=======
-  const handleDeleteCheque = async (id) => {
-    if (!window.confirm('Are you sure you want to permanently delete this cheque record? This will also remove the linked financial transaction.')) return;
-    try {
-      await deleteTransaction(id);
->>>>>>> 6e38bb6df289ec2e0085cc7a6d886a1f493448a9
+
       toast.success('Cheque deleted successfully');
       fetchCheques();
     } catch (err) {
@@ -268,11 +258,8 @@ const AdminCheques = () => {
                         <td className="p-5 text-right">
                           <div className="flex items-center justify-end gap-2">
                             <button
-<<<<<<< HEAD
                               onClick={() => handleDeleteClick(c)}
-=======
-                              onClick={() => handleDeleteCheque(c._id)}
->>>>>>> 6e38bb6df289ec2e0085cc7a6d886a1f493448a9
+
                               className="p-2 rounded-lg text-red-400 hover:text-red-600 hover:bg-red-50 transition-all"
                               title="Delete Cheque Record"
                             >

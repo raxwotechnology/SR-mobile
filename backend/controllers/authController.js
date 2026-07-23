@@ -191,12 +191,8 @@ const authUser = async (req, res) => {
       return fail(res, 400, 'Email and password are required');
     }
 
-<<<<<<< HEAD
     const normalizedEmail = email.trim().toLowerCase();
     const user = await User.findOne({ email: normalizedEmail }).populate('assignedStore', 'name');
-=======
-    const user = await User.findOne({ email }).populate('assignedStore', 'name');
->>>>>>> 6e38bb6df289ec2e0085cc7a6d886a1f493448a9
 
     if (!user) {
       return fail(res, 401, 'Invalid email or password');

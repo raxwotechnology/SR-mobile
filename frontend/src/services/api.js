@@ -355,7 +355,6 @@ export const deleteHPRecord = (id) => API.delete(`/hp/${id}`);
 export const createReload = (data) => API.post('/reloads', data);
 export const getReloads = (params) => API.get('/reloads', { params });
 
-<<<<<<< HEAD
 // Repairs
 export const getRepairs = (params) => API.get('/repairs', { params });
 export const getRepairById = (id) => API.get(`/repairs/${id}`);
@@ -364,8 +363,7 @@ export const updateRepair = (id, data) => API.put(`/repairs/${id}`, data);
 export const deliverRepair = (id, data) => API.put(`/repairs/${id}/deliver`, data);
 export const deleteRepair = (id) => API.delete(`/repairs/${id}`);
 
-=======
->>>>>>> 6e38bb6df289ec2e0085cc7a6d886a1f493448a9
+
 // Send receipt manually
 export const sendInvoiceReceipt = (id, data) => API.post(`/pos/orders/${id}/send-receipt`, data);
 

@@ -1,9 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
-<<<<<<< HEAD
 import { Calendar, Check, X, Clock, FileText, FileSpreadsheet, Plus, Edit2, Trash2, CheckCircle, AlertCircle } from 'lucide-react';
-=======
-import { Calendar, Check, X, Clock, FileText, FileSpreadsheet, Plus, Edit2, Trash2, CheckCircle } from 'lucide-react';
->>>>>>> 6e38bb6df289ec2e0085cc7a6d886a1f493448a9
+
 import DashboardLayout from '../../components/DashboardLayout';
 import { toast } from 'react-toastify';
 import { adminNavGroups as navItems } from './adminNavItems';
@@ -57,10 +54,8 @@ const AdminLeaves = () => {
 
   // Assign Policy Form/Modal State
   const [showAssignModal, setShowAssignModal] = useState(false);
-<<<<<<< HEAD
   const [showBulkAssignConfirm, setShowBulkAssignConfirm] = useState(false);
-=======
->>>>>>> 6e38bb6df289ec2e0085cc7a6d886a1f493448a9
+
   const [assignForm, setAssignForm] = useState({
     employeeId: '',
     employeeName: '',
@@ -245,7 +240,6 @@ const AdminLeaves = () => {
   };
 
   const handleSaveAssignment = async (e) => {
-<<<<<<< HEAD
     if (e) e.preventDefault();
     if (assignForm.employeeId === 'all' && !showBulkAssignConfirm) {
       setShowBulkAssignConfirm(true);
@@ -253,20 +247,13 @@ const AdminLeaves = () => {
     }
     try {
       if (assignForm.employeeId === 'all') {
-=======
-    e.preventDefault();
-    try {
-      if (assignForm.employeeId === 'all') {
-        if (!window.confirm("Are you sure you want to assign this policy to all employees? This will overwrite their current individual policies.")) return;
->>>>>>> 6e38bb6df289ec2e0085cc7a6d886a1f493448a9
+
         await assignPoliciesToAllEmployees({
           leavePolicyId: assignForm.leavePolicyId || null
         });
         toast.success('Leave policy assigned to all employees successfully');
-<<<<<<< HEAD
         setShowBulkAssignConfirm(false);
-=======
->>>>>>> 6e38bb6df289ec2e0085cc7a6d886a1f493448a9
+
       } else {
         await assignPoliciesToEmployee({
           employeeId: assignForm.employeeId,
@@ -887,7 +874,6 @@ const AdminLeaves = () => {
         onConfirm={handlePolicyDeleteConfirm}
         itemName={policyToDelete?.name}
       />
-<<<<<<< HEAD
 
       {/* Bulk Assign Confirmation Modal */}
       {showBulkAssignConfirm && (
@@ -926,8 +912,7 @@ const AdminLeaves = () => {
           </div>
         </div>
       )}
-=======
->>>>>>> 6e38bb6df289ec2e0085cc7a6d886a1f493448a9
+
     </DashboardLayout>
   );
 };

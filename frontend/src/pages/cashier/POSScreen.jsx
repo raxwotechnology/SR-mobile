@@ -31,11 +31,8 @@ import {
   RefreshCw,
 } from 'lucide-react';
 
-<<<<<<< HEAD
 import { getPosProducts, getProductByBarcode, posCheckout, getPosOrders, applyVoucher, getSettings, getActivePosSession, startPosSession, endPosSession, getPosPayHereHash, redeemPoints, getMyLoyaltyPoints, getCreditOrders, settleCreditOrder, getCategories, createQuotation, createProduct, getAccounts, loginUser, getCashiers, posLogin, getPosOrderByInvoice, createCustomerReturn } from '../../services/api';
-=======
-import { getPosProducts, getProductByBarcode, posCheckout, getPosOrders, applyVoucher, getSettings, getActivePosSession, startPosSession, endPosSession, getPosPayHereHash, redeemPoints, getMyLoyaltyPoints, getCreditOrders, settleCreditOrder, getCategories, createQuotation, createProduct, getAccounts, loginUser, getCashiers, posLogin } from '../../services/api';
->>>>>>> 6e38bb6df289ec2e0085cc7a6d886a1f493448a9
+
 
 
 import usePosStore from '../../store/posStore';
@@ -416,13 +413,10 @@ const POSScreen = () => {
     }
     try {
       setSearchingInvoice(true);
-<<<<<<< HEAD
       // Clean leading '#' and whitespace to prevent browser URL fragment truncation
       const cleanedInvoiceNo = returnInvoiceNo.trim().replace(/^[#\s]+/, '');
       const { data } = await getPosOrderByInvoice(cleanedInvoiceNo);
-=======
-      const { data } = await getPosOrderByInvoice(returnInvoiceNo);
->>>>>>> 6e38bb6df289ec2e0085cc7a6d886a1f493448a9
+
       setReturnOrder(data);
       setReturnItems(data.items.map(it => ({
         productId: it.productId,
@@ -545,22 +539,16 @@ const POSScreen = () => {
     // Determine if any item is a mobile device and validate customer info
     let hasMobiles = false;
     for (const item of pos.cart) {
-<<<<<<< HEAD
       const prod = productCache[item.productId] || products.find(p => p._id === item.productId);
       if (prod) {
         const catName = prod.categoryId?.name || '';
         const isMobile = /mobile|phone|tablet|smartphone/i.test(catName) || (prod.imei && prod.imei.length > 0) || prod.ram || prod.storage;
-=======
-      const prod = products.find(p => p._id === item.productId);
-      if (prod) {
-        const isMobile = (prod.imei && prod.imei.length > 0) || prod.ram || prod.storage;
->>>>>>> 6e38bb6df289ec2e0085cc7a6d886a1f493448a9
+
         if (isMobile) hasMobiles = true;
       }
     }
 
     if (hasMobiles || isCredit || isHP) {
-<<<<<<< HEAD
       // Validate that all mobile device items have exactly their required IMEIs scanned
       for (const item of pos.cart) {
         const prod = productCache[item.productId] || products.find(p => p._id === item.productId);
@@ -577,8 +565,7 @@ const POSScreen = () => {
         }
       }
 
-=======
->>>>>>> 6e38bb6df289ec2e0085cc7a6d886a1f493448a9
+
       if (!pos.customerName || !pos.customerPhone) {
         toast.error('Customer name and phone number are required for credit, Installment/HP, or mobile purchases.');
         setShowCustomerInfo(true);
@@ -601,11 +588,8 @@ const POSScreen = () => {
     const totalDiscount = pos.getTotalDiscount();
     const discountRatio = subtotal > 0 ? (totalDiscount / subtotal) : 0;
     for (const item of pos.cart) {
-<<<<<<< HEAD
       const prod = productCache[item.productId] || products.find(p => p._id === item.productId);
-=======
-      const prod = products.find(p => p._id === item.productId);
->>>>>>> 6e38bb6df289ec2e0085cc7a6d886a1f493448a9
+
       if (prod) {
         const effectivePrice = item.price * (1 - discountRatio);
         if (effectivePrice < (prod.minPrice || 0)) {
@@ -2249,12 +2233,9 @@ const POSScreen = () => {
                                     interestRate: 0,
                                     interestAmount: 0,
                                     netTotal: grandTotal,
-<<<<<<< HEAD
                                     installmentAmount: grandTotal / 6,
                                     startDate: new Date().toISOString().split('T')[0]
-=======
-                                    installmentAmount: grandTotal / 6
->>>>>>> 6e38bb6df289ec2e0085cc7a6d886a1f493448a9
+
                                   });
                                 }
                                 setPayments(newPayments);
@@ -2283,11 +2264,8 @@ const POSScreen = () => {
                                 <option value="">Select Account</option>
                                 {accounts.map(a => (
                                   <option key={a._id} value={a._id}>
-<<<<<<< HEAD
                                     {a.name}
-=======
-                                    {a.name} {a.balance !== undefined ? `(Rs. ${a.balance.toLocaleString()})` : ''}
->>>>>>> 6e38bb6df289ec2e0085cc7a6d886a1f493448a9
+
                                   </option>
                                 ))}
                               </select>
@@ -2436,22 +2414,16 @@ const POSScreen = () => {
                         <input type="number" value={pos.hirePurchaseData?.downPayment || 0}
                           onChange={(e) => {
                             const dp = Number(e.target.value);
-<<<<<<< HEAD
                             const interest = Number(pos.hirePurchaseData?.interestAmount || 0);
-=======
-                            const interest = Number(pos.hirePurchaseData.interestAmount || 0);
->>>>>>> 6e38bb6df289ec2e0085cc7a6d886a1f493448a9
+
                             const netTotal = grandTotal + interest;
                             const bal = netTotal - dp;
                             pos.setHirePurchaseData({
                               ...pos.hirePurchaseData,
                               downPayment: dp,
                               netTotal: netTotal,
-<<<<<<< HEAD
                               installmentAmount: bal / (pos.hirePurchaseData?.numberOfInstallments || 1)
-=======
-                              installmentAmount: bal / (pos.hirePurchaseData.numberOfInstallments || 1)
->>>>>>> 6e38bb6df289ec2e0085cc7a6d886a1f493448a9
+
                             });
                           }}
                           placeholder="0.00" className="pos-input" style={{ fontSize: '12px', background: '#fff', fontWeight: 'bold', color: '#1e293b' }} />
@@ -2493,11 +2465,8 @@ const POSScreen = () => {
                             <option value="">Select Account</option>
                             {accounts.map(a => (
                               <option key={a._id} value={a._id}>
-<<<<<<< HEAD
                                 {a.name}
-=======
-                                {a.name} {a.balance !== undefined ? `(Rs. ${a.balance.toLocaleString()})` : ''}
->>>>>>> 6e38bb6df289ec2e0085cc7a6d886a1f493448a9
+
                               </option>
                             ))}
                           </select>
@@ -2622,11 +2591,8 @@ const POSScreen = () => {
                           <option value="">Select Account</option>
                           {accounts.map(a => (
                             <option key={a._id} value={a._id}>
-<<<<<<< HEAD
                               {a.name}
-=======
-                              {a.name} {a.balance !== undefined ? `(Rs. ${a.balance.toLocaleString()})` : ''}
->>>>>>> 6e38bb6df289ec2e0085cc7a6d886a1f493448a9
+
                             </option>
                           ))}
                         </select>

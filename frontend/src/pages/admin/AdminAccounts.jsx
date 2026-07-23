@@ -1,10 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Plus, Edit2, Trash2, Search, X, Wallet, CreditCard, Landmark, ArrowUpRight, ArrowDownLeft, History, MoreVertical, TrendingUp, DollarSign } from 'lucide-react';
 import DashboardLayout from '../../components/DashboardLayout';
-<<<<<<< HEAD
 import DeleteConfirmationModal from '../../components/DeleteConfirmationModal';
-=======
->>>>>>> 6e38bb6df289ec2e0085cc7a6d886a1f493448a9
 import { getAccounts, createAccount, updateAccount, deleteAccount, getAccountTransactions, getStores } from '../../services/api';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
@@ -99,7 +96,6 @@ const AdminAccounts = () => {
     }
   };
 
-<<<<<<< HEAD
   const handleDeleteClick = (account) => {
     setItemToDelete(account);
     setDeleteModalOpen(true);
@@ -108,12 +104,6 @@ const AdminAccounts = () => {
   const handleDeleteConfirm = async () => {
     try {
       await deleteAccount(itemToDelete._id);
-=======
-  const handleDelete = async (id) => {
-    if (!window.confirm('Are you sure you want to permanently delete this account?')) return;
-    try {
-      await deleteAccount(id);
->>>>>>> 6e38bb6df289ec2e0085cc7a6d886a1f493448a9
       toast.success('Account deleted successfully');
       fetchData();
     } catch (err) {
@@ -236,11 +226,7 @@ const AdminAccounts = () => {
                 <div className="flex gap-1">
                    <button onClick={() => fetchTransactions(account)} className="p-2 rounded-xl bg-gray-50 text-gray-400 hover:text-primary-blue hover:bg-indigo-50 transition-all" title="Ledger Transactions"><History size={16} /></button>
                    <button onClick={() => openEdit(account)} className="p-2 rounded-xl bg-gray-50 text-gray-400 hover:text-primary-blue hover:bg-indigo-50 transition-all" title="Edit Account"><Edit2 size={16} /></button>
-<<<<<<< HEAD
                    <button onClick={() => handleDeleteClick(account)} className="p-2 rounded-xl bg-gray-50 text-gray-400 hover:text-rose-600 hover:bg-red-50 transition-all" title="Delete Account"><Trash2 size={16} /></button>
-=======
-                   <button onClick={() => handleDelete(account._id)} className="p-2 rounded-xl bg-gray-50 text-gray-400 hover:text-rose-600 hover:bg-red-50 transition-all" title="Delete Account"><Trash2 size={16} /></button>
->>>>>>> 6e38bb6df289ec2e0085cc7a6d886a1f493448a9
                 </div>
               </div>
 

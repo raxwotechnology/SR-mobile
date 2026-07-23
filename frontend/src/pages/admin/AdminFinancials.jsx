@@ -326,11 +326,8 @@ const AdminFinancials = () => {
                   { label: 'Type', accessor: (r) => r.type === 'in' ? 'Cash In (Bank Transfer)' : 'Cash Out (Expense)' },
                   { label: 'Amount (Rs.)', accessor: (r) => r.amount?.toLocaleString() },
                   { label: 'Description', accessor: 'description' },
-<<<<<<< HEAD
                   { label: 'Ref No', accessor: (r) => r.referenceNo || '-' },
-=======
-                  { label: 'Ref No', accessor: 'referenceNo' || '-' },
->>>>>>> 6e38bb6df289ec2e0085cc7a6d886a1f493448a9
+
                   { label: 'Linked Account', accessor: (r) => r.accountId?.name || '-' },
                   { label: 'Logged By', accessor: (r) => r.loggedBy?.name || 'System' }
                 ];
@@ -349,13 +346,9 @@ const AdminFinancials = () => {
                   { label: 'Year', accessor: 'year' },
                   { label: 'Period', accessor: 'period' },
                   { label: 'Amount (Rs.)', accessor: (r) => r.amount?.toLocaleString() },
-<<<<<<< HEAD
                   { label: 'Ref No', accessor: (r) => r.referenceNo || '-' },
                   { label: 'Notes', accessor: (r) => r.notes || '-' }
-=======
-                  { label: 'Ref No', accessor: 'referenceNo' || '-' },
-                  { label: 'Notes', accessor: 'notes' || '-' }
->>>>>>> 6e38bb6df289ec2e0085cc7a6d886a1f493448a9
+
                 ];
                 exportToPDF(taxPayments, taxCols, 'Income Tax Payments');
               }} className="bg-red-600 hover:bg-red-700 text-white text-sm font-medium px-4 py-2 rounded-xl transition-colors flex items-center gap-1 shadow-sm">

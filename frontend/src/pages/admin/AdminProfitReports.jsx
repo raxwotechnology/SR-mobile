@@ -81,29 +81,21 @@ const AdminProfitReports = () => {
       case 'today':
         start = end;
         break;
-<<<<<<< HEAD
       case 'week': {
-=======
-      case 'week':
->>>>>>> 6e38bb6df289ec2e0085cc7a6d886a1f493448a9
+
         const prevWeek = new Date(today);
         prevWeek.setDate(today.getDate() - 7);
         start = prevWeek.toISOString().split('T')[0];
         break;
-<<<<<<< HEAD
       }
       case 'month': {
-=======
-      case 'month':
->>>>>>> 6e38bb6df289ec2e0085cc7a6d886a1f493448a9
+
         const prevMonth = new Date(today);
         prevMonth.setMonth(today.getMonth() - 1);
         start = prevMonth.toISOString().split('T')[0];
         break;
-<<<<<<< HEAD
       }
-=======
->>>>>>> 6e38bb6df289ec2e0085cc7a6d886a1f493448a9
+
       case 'year':
         start = `${today.getFullYear()}-01-01`;
         break;

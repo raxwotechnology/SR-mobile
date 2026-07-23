@@ -174,22 +174,14 @@ const getPosProducts = async (req, res, next) => {
         { sku: { $regex: search, $options: 'i' } },
       ];
       products = await Product.find(filter)
-<<<<<<< HEAD
         .select('name price mrp minPrice stock images unit barcode sku variants discount allowKokoPos imei categoryId')
         .populate('categoryId', 'name')
-=======
-        .select('name price mrp minPrice stock images unit barcode sku variants discount allowKokoPos')
->>>>>>> 6e38bb6df289ec2e0085cc7a6d886a1f493448a9
         .limit(50)
         .lean();
     } else {
       products = await Product.find(filter)
-<<<<<<< HEAD
         .select('name price mrp minPrice stock images unit barcode sku variants discount allowKokoPos imei categoryId')
         .populate('categoryId', 'name')
-=======
-        .select('name price mrp minPrice stock images unit barcode sku variants discount allowKokoPos')
->>>>>>> 6e38bb6df289ec2e0085cc7a6d886a1f493448a9
         .limit(100)
         .lean();
     }
@@ -216,12 +208,8 @@ const getProductByBarcode = async (req, res, next) => {
       storeId,
       status: 'active',
     })
-<<<<<<< HEAD
       .select('name price mrp minPrice stock images unit barcode sku variants discount allowKokoPos imei categoryId')
       .populate('categoryId', 'name')
-=======
-      .select('name price mrp minPrice stock images unit barcode sku variants discount allowKokoPos')
->>>>>>> 6e38bb6df289ec2e0085cc7a6d886a1f493448a9
       .lean();
 
     if (!product) {
@@ -412,11 +400,7 @@ const posCheckout = async (req, res, next) => {
           return next(new Error(`Please scan/select exactly ${item.quantity} IMEI number(s) for ${product.name}.`));
         }
         for (const im of item.imei) {
-<<<<<<< HEAD
           if (product.imei && product.imei.length > 0 && !product.imei.includes(im)) {
-=======
-          if (!product.imei.includes(im)) {
->>>>>>> 6e38bb6df289ec2e0085cc7a6d886a1f493448a9
             res.status(400);
             return next(new Error(`IMEI ${im} is not available in stock for ${product.name}.`));
           }
@@ -504,11 +488,7 @@ const posCheckout = async (req, res, next) => {
     }
 
     // Dynamic tax from settings or custom input override
-<<<<<<< HEAD
-    let taxRate = 0.00; // default 0%
-=======
     let taxRate = 0.05; // default 5%
->>>>>>> 6e38bb6df289ec2e0085cc7a6d886a1f493448a9
     if (customTaxRate !== undefined) {
       taxRate = Number(customTaxRate) / 100;
     } else {
@@ -1032,7 +1012,6 @@ const settleCreditOrder = async (req, res, next) => {
 // @access  Private/Cashier/Manager/Admin
 const getPosOrderByInvoice = async (req, res, next) => {
   try {
-<<<<<<< HEAD
     const rawInvoice = req.params.invoiceNumber || '';
     const fs = require('fs');
     const path = require('path');
@@ -1062,23 +1041,16 @@ const getPosOrderByInvoice = async (req, res, next) => {
     writeLog(`Normalized to: "${clean}". Regex pattern: "${pattern}"`);
 
     const order = await Order.findOne({ invoiceNumber: { $regex: new RegExp(pattern, 'i') } })
-=======
-    const order = await Order.findOne({ invoiceNumber: req.params.invoiceNumber })
->>>>>>> 6e38bb6df289ec2e0085cc7a6d886a1f493448a9
       .populate('storeId', 'name address phone email logo')
       .populate('cashierId', 'name')
       .lean();
 
     if (!order) {
-<<<<<<< HEAD
       writeLog(`Order not found for pattern "${pattern}"`);
-=======
->>>>>>> 6e38bb6df289ec2e0085cc7a6d886a1f493448a9
       res.status(404);
       return next(new Error('Invoice not found'));
     }
 
-<<<<<<< HEAD
     writeLog(`Order found! Invoice: ${order.invoiceNumber}, ID: ${order._id}`);
     res.json(order);
   } catch (error) {
@@ -1088,10 +1060,6 @@ const getPosOrderByInvoice = async (req, res, next) => {
       const logPath = path.join(__dirname, '..', 'debug.log');
       fs.appendFileSync(logPath, `[${new Date().toISOString()}] Error: ${error.message}\n`);
     } catch (e) {}
-=======
-    res.json(order);
-  } catch (error) {
->>>>>>> 6e38bb6df289ec2e0085cc7a6d886a1f493448a9
     next(error);
   }
 };

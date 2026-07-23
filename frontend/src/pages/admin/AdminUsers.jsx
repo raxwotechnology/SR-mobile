@@ -6,11 +6,9 @@ import { toast } from 'react-toastify';
 import { adminNavGroups as navItems } from './adminNavItems';
 import useAdminStoreStore from '../../store/adminStoreStore';
 import DeleteConfirmationModal from '../../components/DeleteConfirmationModal';
-<<<<<<< HEAD
 import { getImageUrl } from '../../utils/imageHelper';
 import useAuthStore from '../../store/authStore';
-=======
->>>>>>> 6e38bb6df289ec2e0085cc7a6d886a1f493448a9
+
 
 const roleColors = {
   customer: 'bg-sky-100 text-sky-700',
@@ -122,7 +120,6 @@ const AdminUsers = () => {
     setToggleModalOpen(true);
   };
 
-<<<<<<< HEAD
   const handleToggleConfirm = async () => {
     if (!userToToggle) return;
     try {
@@ -148,19 +145,7 @@ const AdminUsers = () => {
   const handleDeleteConfirm = async () => {
     if (!itemToDelete) return;
     try {
-=======
-  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
-  const [itemToDelete, setItemToDelete] = useState(null);
 
-  const handleDeleteClick = (user) => {
-    setItemToDelete({ id: user._id, name: user.name });
-    setDeleteModalOpen(true);
-  };
-
-  const handleDeleteConfirm = async () => {
-    if (!itemToDelete) return;
-    try {
->>>>>>> 6e38bb6df289ec2e0085cc7a6d886a1f493448a9
       await deleteUser(itemToDelete.id);
       toast.success('User deleted');
       fetchUsers();
@@ -455,7 +440,6 @@ const AdminUsers = () => {
         onConfirm={handleDeleteConfirm}
         itemName={itemToDelete?.name}
       />
-<<<<<<< HEAD
 
       {/* Toggle Status Confirmation Modal */}
       {toggleModalOpen && userToToggle && (
@@ -496,8 +480,7 @@ const AdminUsers = () => {
           </div>
         </div>
       )}
-=======
->>>>>>> 6e38bb6df289ec2e0085cc7a6d886a1f493448a9
+
     </DashboardLayout>
   );
 };

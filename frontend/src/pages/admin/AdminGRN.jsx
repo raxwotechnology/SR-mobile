@@ -1,10 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Package, ShoppingBag, Plus, Trash2, Search, Printer, Eye, X, FileText, Calendar, Filter } from 'lucide-react';
 import DashboardLayout from '../../components/DashboardLayout';
-<<<<<<< HEAD
 import DeleteConfirmationModal from '../../components/DeleteConfirmationModal';
-=======
->>>>>>> 6e38bb6df289ec2e0085cc7a6d886a1f493448a9
+
 import { createStockReceipt, getStockReceipts, getSuppliers, getReceiptByGRN, getAdminProducts, getStores, deleteStockReceipt } from '../../services/api';
 import { toast } from 'react-toastify';
 import { adminNavGroups as navItems } from './adminNavItems';
@@ -67,7 +65,6 @@ const AdminGRN = () => {
     }
   };
 
-<<<<<<< HEAD
   const handleDeleteClick = (id, e) => {
     if (e) e.stopPropagation();
     setItemToDelete({ _id: id });
@@ -77,13 +74,7 @@ const AdminGRN = () => {
   const handleDeleteConfirm = async () => {
     try {
       await deleteStockReceipt(itemToDelete._id);
-=======
-  const handleDeleteGRN = async (id, e) => {
-    if (e) e.stopPropagation();
-    if (!window.confirm('Are you sure you want to delete this GRN? This will restore original stock levels.')) return;
-    try {
-      await deleteStockReceipt(id);
->>>>>>> 6e38bb6df289ec2e0085cc7a6d886a1f493448a9
+
       toast.success('GRN deleted successfully');
       fetchHistory();
       fetchData();
@@ -363,11 +354,8 @@ const AdminGRN = () => {
                         <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                           <button onClick={(e) => { e.stopPropagation(); setViewGrn(r); }} className="p-1.5 text-blue-500 hover:bg-blue-50 rounded-lg" title="View"><Eye size={14} /></button>
                           <button onClick={(e) => { e.stopPropagation(); printVoucher(r); }} className="p-1.5 text-emerald-500 hover:bg-emerald-50 rounded-lg" title="Print"><Printer size={14} /></button>
-<<<<<<< HEAD
                           <button onClick={(e) => handleDeleteClick(r._id, e)} className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg" title="Delete"><Trash2 size={14} /></button>
-=======
-                          <button onClick={(e) => handleDeleteGRN(r._id, e)} className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg" title="Delete"><Trash2 size={14} /></button>
->>>>>>> 6e38bb6df289ec2e0085cc7a6d886a1f493448a9
+
                         </div>
                       </div>
                     </div>
