@@ -4,8 +4,15 @@ import axios from 'axios';
 // In production (Netlify): set VITE_API_URL in Netlify dashboard
 // In development: falls back to empty string (uses Vite proxy)
 
+const getBaseUrl = () => {
+  const envUrl = import.meta.env.VITE_API_URL || import.meta.env.VITE_URL || '';
+  const cleanUrl = envUrl.trim().replace(/\/$/, '');
+  if (!cleanUrl) return '/api';
+  return cleanUrl.endsWith('/api') ? cleanUrl : `${cleanUrl}/api`;
+};
+
 const API = axios.create({
-  baseURL: (import.meta.env.VITE_API_URL || '').replace(/\/$/, '') + '/api',
+  baseURL: getBaseUrl(),
   timeout: 90000, // 90s timeout (Render free tier cold starts can be slow)
   headers: {
     'Content-Type': 'application/json',
