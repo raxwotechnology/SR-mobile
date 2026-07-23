@@ -1,7 +1,10 @@
 import { useState, useEffect, Fragment } from 'react';
 import { CheckCircle, XCircle, ChevronDown, ChevronUp, MoreVertical, Printer, MessageSquare, Edit, FileText, Eye, Trash2 } from 'lucide-react';
 import DashboardLayout from '../../components/DashboardLayout';
+<<<<<<< HEAD
 import DeleteConfirmationModal from '../../components/DeleteConfirmationModal';
+=======
+>>>>>>> 6e38bb6df289ec2e0085cc7a6d886a1f493448a9
 import {
   getAdminOrders,
   updateOrderStatus,
@@ -63,8 +66,11 @@ const AdminOrders = () => {
 
   // Edit Modal state
   const [showEditModal, setShowEditModal] = useState(false);
+<<<<<<< HEAD
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState(null);
+=======
+>>>>>>> 6e38bb6df289ec2e0085cc7a6d886a1f493448a9
   const [editForm, setEditForm] = useState({
     id: '',
     customerName: '',
@@ -159,6 +165,7 @@ const AdminOrders = () => {
     }
   };
 
+<<<<<<< HEAD
   const handleDeleteClick = (order, e) => {
     if (e) e.stopPropagation();
     setItemToDelete(order);
@@ -167,6 +174,12 @@ const AdminOrders = () => {
 
   const handleDeleteConfirm = async () => {
     const order = itemToDelete;
+=======
+  const handleDelete = async (order, e) => {
+    if (e) e.stopPropagation();
+    const label = order.invoiceNumber || order._id.slice(-8).toUpperCase();
+    if (!window.confirm(`Permanently delete order #${label}? This cannot be undone.`)) return;
+>>>>>>> 6e38bb6df289ec2e0085cc7a6d886a1f493448a9
     const restoreStock = !['cancelled', 'delivered', 'completed'].includes(order.orderStatus)
       && window.confirm('Restore this order quantity back to stock before deleting?');
     try {
@@ -480,7 +493,11 @@ const AdminOrders = () => {
                             )}
 
                             <button
+<<<<<<< HEAD
                               onClick={(e) => handleDeleteClick(order, e)}
+=======
+                              onClick={(e) => handleDelete(order, e)}
+>>>>>>> 6e38bb6df289ec2e0085cc7a6d886a1f493448a9
                               className="w-full px-4 py-2 hover:bg-red-50 flex items-center gap-2 font-semibold text-red-700"
                             >
                               <Trash2 size={14} className="text-red-600" />

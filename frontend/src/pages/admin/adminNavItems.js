@@ -2,7 +2,11 @@ import {
   LayoutDashboard, Users, Store, Tag, ShoppingBag, Monitor,
   Ticket, BarChart3, DollarSign, Wallet, Package, Gift,
   CreditCard, UserCog, UsersRound, RotateCcw, Barcode, TrendingUp, Brain,
+<<<<<<< HEAD
   Clock, Target, Settings, ChevronRight, Globe, History, Landmark, FileText, Smartphone, Wrench,
+=======
+  Clock, Target, Settings, ChevronRight, Globe, History, Landmark, FileText, Smartphone,
+>>>>>>> 6e38bb6df289ec2e0085cc7a6d886a1f493448a9
 } from 'lucide-react';
 
 

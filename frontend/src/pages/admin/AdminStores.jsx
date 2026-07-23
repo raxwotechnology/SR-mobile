@@ -1,13 +1,20 @@
 import { useState, useEffect } from 'react';
 import { Store, ToggleLeft, ToggleRight, ExternalLink, Plus, X, Edit2, Trash2, AlertCircle, AlertTriangle } from 'lucide-react';
 import DashboardLayout from '../../components/DashboardLayout';
+<<<<<<< HEAD
 import { getAdminStoreSummaries, toggleStoreStatus, createStore, updateStore, deleteStore } from '../../services/api';
+=======
+import { getAdminStoreSummaries, toggleStoreStatus, createStore, updateStore } from '../../services/api';
+>>>>>>> 6e38bb6df289ec2e0085cc7a6d886a1f493448a9
 import API from '../../services/api';
 import { toast } from 'react-toastify';
 import { Link } from 'react-router-dom';
 import { adminNavGroups as navItems } from './adminNavItems';
 import StockTransferModal from './StockTransferModal';
+<<<<<<< HEAD
 import DeleteConfirmationModal from '../../components/DeleteConfirmationModal';
+=======
+>>>>>>> 6e38bb6df289ec2e0085cc7a6d886a1f493448a9
 import { getImageUrl } from '../../utils/imageHelper';
 
 const emptyForm = { name: '', description: '', address: '', city: '', phone: '', email: '', bannerImage: '', logo: '', managerId: '' };

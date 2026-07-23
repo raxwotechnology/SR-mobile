@@ -204,9 +204,13 @@ const InvoiceModal = ({ isOpen, onClose, order, onNewSale }) => {
                 <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '12px', border: '1px solid #f1f5f9' }}>
                   <h3 style={{ fontSize: '9px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', margin: '0 0 6px 0', letterSpacing: '0.5px' }}>Customer Details</h3>
                   <p style={{ fontSize: '12px', fontWeight: 700, color: '#1e293b', margin: '0 0 4px 0' }}>{order.customerName || 'Walk-in Customer'}</p>
+<<<<<<< HEAD
                   {order.customerPhone && <p style={{ fontSize: '11px', color: '#64748b', margin: '0 0 2px 0' }}>Phone: {order.customerPhone}</p>}
                   {order.customerNic && <p style={{ fontSize: '11px', color: '#64748b', margin: '0 0 2px 0' }}>NIC: {order.customerNic}</p>}
                   {order.customerAddress && <p style={{ fontSize: '11px', color: '#64748b', margin: 0 }}>Address: {order.customerAddress}</p>}
+=======
+                  {order.customerPhone && <p style={{ fontSize: '11px', color: '#64748b', margin: 0 }}>Phone: {order.customerPhone}</p>}
+>>>>>>> 6e38bb6df289ec2e0085cc7a6d886a1f493448a9
                 </div>
                 <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '12px', border: '1px solid #f1f5f9' }}>
                   <h3 style={{ fontSize: '9px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', margin: '0 0 6px 0', letterSpacing: '0.5px' }}>Transaction Info</h3>
@@ -391,7 +395,12 @@ const InvoiceModal = ({ isOpen, onClose, order, onNewSale }) => {
                 </div>
               </div>
 
+<<<<<<< HEAD
               {(order.customerName || order.customerPhone || order.customerNic || order.customerAddress) && (
+=======
+              {/* Customer Info */}
+              {(order.customerName || order.customerPhone) && (
+>>>>>>> 6e38bb6df289ec2e0085cc7a6d886a1f493448a9
                 <div style={{ fontSize: '11px', borderBottom: '1px dashed #999', padding: '6px 0', margin: '0 0 6px' }}>
                   {order.customerName && (
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2px' }}>
@@ -400,11 +409,16 @@ const InvoiceModal = ({ isOpen, onClose, order, onNewSale }) => {
                     </div>
                   )}
                   {order.customerPhone && (
+<<<<<<< HEAD
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2px' }}>
+=======
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+>>>>>>> 6e38bb6df289ec2e0085cc7a6d886a1f493448a9
                       <span style={{ color: '#666' }}>Phone:</span>
                       <span style={{ color: '#111' }}>{order.customerPhone}</span>
                     </div>
                   )}
+<<<<<<< HEAD
                   {order.customerNic && (
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2px' }}>
                       <span style={{ color: '#666' }}>NIC:</span>
@@ -417,6 +431,8 @@ const InvoiceModal = ({ isOpen, onClose, order, onNewSale }) => {
                       <span style={{ color: '#111', textAlign: 'right', maxWidth: '70%', wordBreak: 'break-word' }}>{order.customerAddress}</span>
                     </div>
                   )}
+=======
+>>>>>>> 6e38bb6df289ec2e0085cc7a6d886a1f493448a9
                 </div>
               )}
 

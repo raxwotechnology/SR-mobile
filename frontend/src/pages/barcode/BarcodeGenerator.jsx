@@ -2,10 +2,14 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Search, Printer, Download, Package, Barcode, Plus, Minus, Store, X, Trash2 } from 'lucide-react';
 import JsBarcode from 'jsbarcode';
 import DashboardLayout from '../../components/DashboardLayout';
+<<<<<<< HEAD
 import DeleteConfirmationModal from '../../components/DeleteConfirmationModal';
+=======
+>>>>>>> 6e38bb6df289ec2e0085cc7a6d886a1f493448a9
 import { getAdminProducts, logBarcodeGeneration, getSettings, updateSettings } from '../../services/api';
 import useAuthStore from '../../store/authStore';
 import { toast } from 'react-toastify';
+import DeleteConfirmationModal from '../../components/DeleteConfirmationModal';
 
 // Dynamic nav items based on role
 import { adminNavGroups } from '../admin/adminNavItems';
@@ -34,8 +38,11 @@ const BarcodeGenerator = () => {
   const [printers, setPrinters] = useState([]);
   const [selectedPrinter, setSelectedPrinter] = useState(null);
   const [showPrinterModal, setShowPrinterModal] = useState(false);
+<<<<<<< HEAD
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState(null);
+=======
+>>>>>>> 6e38bb6df289ec2e0085cc7a6d886a1f493448a9
   const [newPrinter, setNewPrinter] = useState({ name: '', layout: '50x30', connection: 'USB' });
   const [printerAssignments, setPrinterAssignments] = useState({});
 
@@ -103,6 +110,7 @@ const BarcodeGenerator = () => {
     handleSavePrinters(updated);
   };
 
+<<<<<<< HEAD
   const handleDeleteClick = (printer) => {
     setItemToDelete(printer);
     setDeleteModalOpen(true);
@@ -110,6 +118,10 @@ const BarcodeGenerator = () => {
 
   const handleDeleteConfirm = () => {
     const updated = printers.filter(p => p._id !== itemToDelete._id);
+=======
+  const handleDeletePrinter = (id) => {
+    const updated = printers.filter(p => p._id !== id);
+>>>>>>> 6e38bb6df289ec2e0085cc7a6d886a1f493448a9
     if (updated.length > 0 && !updated.some(p => p.isDefault)) {
       updated[0].isDefault = true;
     }
@@ -758,7 +770,11 @@ const BarcodeGenerator = () => {
                           </button>
                         )}
                         <button
+<<<<<<< HEAD
                           onClick={() => handleDeleteClick(p)}
+=======
+                          onClick={() => handleDeletePrinter(p._id)}
+>>>>>>> 6e38bb6df289ec2e0085cc7a6d886a1f493448a9
                           className="p-1 text-red-500 hover:bg-red-50 rounded-lg"
                         >
                           <Trash2 size={14} />
@@ -819,6 +835,7 @@ const BarcodeGenerator = () => {
           </div>
         </div>
       )}
+<<<<<<< HEAD
 
       <DeleteConfirmationModal
         isOpen={deleteModalOpen}
@@ -826,6 +843,8 @@ const BarcodeGenerator = () => {
         onConfirm={handleDeleteConfirm}
         itemName={itemToDelete?.name || 'this printer'}
       />
+=======
+>>>>>>> 6e38bb6df289ec2e0085cc7a6d886a1f493448a9
     </DashboardLayout>
   );
 };

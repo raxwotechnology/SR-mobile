@@ -29,6 +29,8 @@ const allowedOrigins = [
   'https://www.max-durakathana.netlify.app',
   'https://mobilehubtech.netlify.app',
   'https://www.mobilehubtech.netlify.app',
+  'https://max-durakathana.netlify.app',
+  'https://www.max-durakathana.netlify.app',
   'http://localhost:3000',
   ...envOrigins,
 ];

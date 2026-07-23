@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Edit2, Landmark, Plus, Search, Trash2, X } from 'lucide-react';
+<<<<<<< HEAD
 import DeleteConfirmationModal from '../../components/DeleteConfirmationModal';
+=======
+>>>>>>> 6e38bb6df289ec2e0085cc7a6d886a1f493448a9
 import { toast } from 'react-toastify';
 import useAuthStore from '../../store/authStore';
 import { createSupplier, deleteSupplier, getSuppliers, updateSupplier } from '../../services/api';
@@ -218,7 +221,11 @@ const SuppliersPanel = ({ storeId, stores = [], onStoreChange }) => {
                     <td className="px-6 py-3.5 text-right">
                       <div className="flex items-center justify-end gap-2">
                         <button onClick={() => openEdit(s)} className="p-2 rounded-lg hover:bg-blue-50 text-blue-500"><Edit2 size={16} /></button>
+<<<<<<< HEAD
                         <button onClick={() => handleDeleteClick(s)} className="p-2 rounded-lg hover:bg-red-50 text-red-500"><Trash2 size={16} /></button>
+=======
+                        <button onClick={() => handleDelete(s._id)} className="p-2 rounded-lg hover:bg-red-50 text-red-500"><Trash2 size={16} /></button>
+>>>>>>> 6e38bb6df289ec2e0085cc7a6d886a1f493448a9
                       </div>
                     </td>
                   </tr>

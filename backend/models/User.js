@@ -24,6 +24,10 @@ const userSchema = mongoose.Schema(
       enum: ['customer', 'manager', 'admin', 'cashier', 'deliveryGuy', 'stockEmployee'],
       default: 'customer',
     },
+    isSuperAdmin: {
+      type: Boolean,
+      default: false,
+    },
     assignedStore: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Store',

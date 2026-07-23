@@ -225,7 +225,10 @@ const AdminHP = () => {
                       <div>
                         <p className="text-xs font-bold text-dark-navy">{record.customer.name}</p>
                         <p className="text-[10px] text-slate-500 font-medium">{record.customer.phone} | {record.customer.nic}</p>
+<<<<<<< HEAD
                         <p className="text-[9px] text-indigo-600 font-bold mt-0.5">Agreement Date: {new Date(record.startDate || record.createdAt).toLocaleDateString()}</p>
+=======
+>>>>>>> 6e38bb6df289ec2e0085cc7a6d886a1f493448a9
                       </div>
                     </td>
                     <td className="px-4 py-4 text-xs text-slate-600 max-w-[150px] truncate" title={record.orderId?.items?.map(i => `${i.name} (x${i.quantity})`).join(', ')}>
@@ -391,10 +394,13 @@ const AdminHP = () => {
                         <span className="font-extrabold text-rose-600">Rs. {selectedHPDetails.balanceAmount.toLocaleString()}</span>
                       </div>
                       <div className="flex justify-between text-[11px] text-slate-500 pt-1">
+<<<<<<< HEAD
                         <span>Agreement Date:</span>
                         <span className="font-semibold text-slate-700">{new Date(selectedHPDetails.startDate || selectedHPDetails.createdAt).toLocaleDateString()}</span>
                       </div>
                       <div className="flex justify-between text-[11px] text-slate-500">
+=======
+>>>>>>> 6e38bb6df289ec2e0085cc7a6d886a1f493448a9
                         <span>Original Cashier:</span>
                         <span>{selectedHPDetails.createdBy?.name || 'System'}</span>
                       </div>
