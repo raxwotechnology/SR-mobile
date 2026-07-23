@@ -45,7 +45,8 @@ app.use(cors({
     const isLocalhost =
       /^http:\/\/localhost:\d+$/.test(origin) ||
       /^http:\/\/127\.0\.0\.1:\d+$/.test(origin);
-    if (allowedOrigins.includes(origin) || isLocalhost) {
+    const isNetlify = /\.netlify\.app$/.test(origin);
+    if (allowedOrigins.includes(origin) || isLocalhost || isNetlify) {
       return callback(null, true);
     }
     return callback(new Error('Not allowed by CORS'));

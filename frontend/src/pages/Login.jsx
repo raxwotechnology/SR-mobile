@@ -39,57 +39,7 @@ const Login = () => {
     toast.info('Logged out. You can now sign in with a different account.');
   };
 
-  const handleMockLogin = (adminKey) => {
-    const mockData = {
-      admin1: {
-        _id: "mock_admin_1_" + Date.now(),
-        name: "Talk N Fix Admin 1 (Mock)",
-        email: "admin@mobilehub.com",
-        role: "admin",
-        isSuperAdmin: true,
-        token: "mock_jwt_token_bypass",
-        permissions: {
-          inventory: true,
-          finance: true,
-          products: true,
-          sales: true,
-          reports: true,
-          employees: true,
-          suppliers: true,
-          customers: true,
-          rewards: true,
-          vouchers: true,
-          settings: true,
-        }
-      },
-      admin2: {
-        _id: "mock_admin_2_" + Date.now(),
-        name: "Talk N Fix Admin 2 (Mock)",
-        email: "admin2@mobilehub.com",
-        role: "admin",
-        isSuperAdmin: true,
-        token: "mock_jwt_token_bypass",
-        permissions: {
-          inventory: true,
-          finance: true,
-          products: true,
-          sales: true,
-          reports: true,
-          employees: true,
-          suppliers: true,
-          customers: true,
-          rewards: true,
-          vouchers: true,
-          settings: true,
-        }
-      }
-    };
 
-    const selectedAdmin = mockData[adminKey];
-    login(selectedAdmin);
-    toast.success(`Welcome back, ${selectedAdmin.name}! (Offline Mock Mode)`);
-    navigate('/admin');
-  };
 
   // If already logged in, show continue/switch options
   if (isAuthenticated && user) {
@@ -204,58 +154,6 @@ const Login = () => {
             {loading ? 'Signing In...' : 'Sign In'}
           </button>
         </form>
-
-        <div className="relative my-6">
-          <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-gray-200"></div>
-          </div>
-          <div className="relative flex justify-center text-sm">
-            <span className="bg-white px-2 text-gray-500 font-medium">Quick Admin Access</span>
-          </div>
-        </div>
-
-        <div className="space-y-3">
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                setEmail('admin@mobilehub.com');
-                setPassword('admin123');
-                toast.info('Filled Admin 1 credentials');
-              }}
-              className="text-xs font-semibold py-2.5 px-3 bg-gray-50 border border-gray-200 rounded-xl hover:bg-gray-100 text-dark-navy text-center transition-all"
-            >
-              Fill Admin 1
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setEmail('admin2@mobilehub.com');
-                setPassword('admin456');
-                toast.info('Filled Admin 2 credentials');
-              }}
-              className="text-xs font-semibold py-2.5 px-3 bg-gray-50 border border-gray-200 rounded-xl hover:bg-gray-100 text-dark-navy text-center transition-all"
-            >
-              Fill Admin 2
-            </button>
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              onClick={() => handleMockLogin('admin1')}
-              className="text-xs font-semibold py-2.5 px-3 bg-indigo-50 border border-indigo-100 rounded-xl hover:bg-indigo-100 text-indigo-700 text-center transition-all"
-            >
-              Bypass Admin 1
-            </button>
-            <button
-              type="button"
-              onClick={() => handleMockLogin('admin2')}
-              className="text-xs font-semibold py-2.5 px-3 bg-indigo-50 border border-indigo-100 rounded-xl hover:bg-indigo-100 text-indigo-700 text-center transition-all"
-            >
-              Bypass Admin 2
-            </button>
-          </div>
-        </div>
 
         <div className="mt-8 text-center">
           <p className="text-sm text-muted-text">

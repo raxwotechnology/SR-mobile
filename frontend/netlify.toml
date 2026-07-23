@@ -2,6 +2,13 @@
   command = "npm run build"
   publish = "dist"
 
+# Proxy API requests to Render backend if VITE_API_URL is missing
+[[redirects]]
+  from = "/api/*"
+  to = "https://sr-mobile-1.onrender.com/api/:splat"
+  status = 200
+  force = true
+
 # SPA redirect — all routes serve index.html
 [[redirects]]
   from = "/*"
