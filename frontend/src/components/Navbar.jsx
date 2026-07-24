@@ -62,7 +62,7 @@ const Navbar = () => {
   const { currency, toggleCurrency, fetchRate, getProductPrice } = useCurrencyStore();
   const settings = useSettingsStore((s) => s.settings);
   const brandName = settings?.shopName || 'Mobile Hub';
-  const brandLogoUrl = getImageUrl(settings?.logoUrl);
+  const brandLogoUrl = getImageUrl(settings?.logoUrl) || '/logo.png';
   const brandPhone = settings?.phone || '+94 11 255 5000';
   const freeDeliveryThreshold = Number(settings?.deliveryFeeThreshold || 5000).toLocaleString();
 

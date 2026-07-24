@@ -29,7 +29,7 @@ const settingsSchema = new mongoose.Schema({
     instagram: { type: String, default: '' },
     twitter: { type: String, default: '' },
   },
-  footerText: { type: String, default: '© 2026 Mobile Hub. All rights reserved.' },
+  footerText: { type: String, default: '© 2026 Raxwo (Pvt) LTD. All rights reserved.' },
   heroProducts: [{
     name: { type: String },
     price: { type: Number },

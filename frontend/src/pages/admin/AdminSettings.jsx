@@ -203,11 +203,11 @@ const AdminSettings = () => {
               <h2 className="font-semibold text-dark-navy mb-4">Shop Branding</h2>
               <div className="flex items-center gap-6 mb-6">
                 <div className="w-24 h-24 rounded-2xl border-2 border-dashed border-card-border flex items-center justify-center overflow-hidden bg-gray-50">
-                  {(settings.logoUrl || settings.logo) ? (
-                    <img src={getImageUrl(settings.logoUrl || settings.logo)} alt="Logo" className="w-full h-full object-cover" />
-                  ) : (
-                    <Store size={32} className="text-gray-300" />
-                  )}
+                  <img
+                    src={getImageUrl(settings.logoUrl || settings.logo) || '/logo.png'}
+                    alt="Logo"
+                    className="w-full h-full object-cover"
+                  />
                 </div>
                 <div>
                   <button onClick={() => fileRef.current?.click()} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-xl transition-colors">
@@ -226,7 +226,7 @@ const AdminSettings = () => {
             {/* Footer */}
             <div className="bg-white rounded-2xl border border-card-border p-6 shadow-sm">
               <h2 className="font-semibold text-dark-navy mb-4">Footer</h2>
-              <SettingsInputField label="Footer Text" value={settings.footerText} onChange={(v) => handleChange('footerText', v)} placeholder="© 2026 Mobile Hub. All rights reserved." />
+              <SettingsInputField label="Footer Text" value={settings.footerText} onChange={(v) => handleChange('footerText', v)} placeholder="© 2026 Raxwo (Pvt) LTD. All rights reserved." />
             </div>
 
             {/* Hero Products */}
