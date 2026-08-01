@@ -8,6 +8,9 @@ import { getSettings } from '../services/api';
  */
 export const toAbsoluteUrl = (path) => {
   if (!path) return '';
+  if (path === '/logo.png' || path === 'logo.png' || path.startsWith('/favicon') || path.startsWith('/assets/')) {
+    return path.startsWith('/') ? path : `/${path}`;
+  }
   // If it starts with http/https or looks like an external domain
   const isExternal = path.startsWith('http') || (/^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9][a-z0-9-]{0,61}[a-z0-9](?:\/.*)?$/i.test(path));
   if (isExternal) {

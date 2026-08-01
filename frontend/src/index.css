@@ -2109,6 +2109,62 @@ body {
   }
 }
 
+/* ── Global Responsive Helpers & Mobile/Tablet Utilities ── */
+.table-responsive {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin-bottom: 1rem;
+}
+
+.table-responsive table {
+  min-width: 600px;
+}
+
+/* Touch target sizing for mobile devices */
+@media (pointer: coarse), (max-width: 768px) {
+  .touch-target {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
+/* Modal responsive bounds */
+.responsive-modal-content {
+  width: calc(100vw - 2rem);
+  max-width: 560px;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+@media (max-width: 640px) {
+  .base-container {
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+  }
+
+  .pos-login-container {
+    margin: 0.5rem;
+    min-height: auto;
+    border-radius: 16px;
+    flex-direction: column;
+  }
+
+  .pos-login-branding {
+    padding: 1.5rem 1rem;
+    border-right: none;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  }
+
+  .pos-login-form-section {
+    padding: 1.5rem 1rem;
+  }
+
+  .pos-login-features {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* ── Responsive: Tablet/Mobile POS ── */
 @media (max-width: 900px) {
   .pos-main {

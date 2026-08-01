@@ -132,7 +132,7 @@ const DashboardLayout = ({ children, navItems, title }) => {
 
   const brandName = settings?.shopName || 'Mobile Hub';
   // Use whichever logo field is populated (logoUrl is built by settingsStore from logo path)
-  const logoSrc = getImageUrl(settings?.logoUrl || settings?.logo || '');
+  const logoSrc = getImageUrl(settings?.logoUrl || settings?.logo || '') || '/logo.png';
 
   // Close sidebar on route change (mobile)
   useEffect(() => {

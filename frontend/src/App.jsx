@@ -96,16 +96,14 @@ const AppLayout = ({ children }) => {
   }, [fetchSettings]);
 
   useEffect(() => {
-    if (settings?.logoUrl) {
-      let link = document.querySelector("link[rel~='icon']");
-      if (!link) {
-        link = document.createElement('link');
-        link.rel = 'icon';
-        document.getElementsByTagName('head')[0].appendChild(link);
-      }
-      link.href = settings.logoUrl;
+    let link = document.querySelector("link[rel~='icon']");
+    if (!link) {
+      link = document.createElement('link');
+      link.rel = 'icon';
+      document.getElementsByTagName('head')[0].appendChild(link);
     }
-  }, [settings]);
+    link.href = '/favicon.png';
+  }, []);
 
   const path = location.pathname;
 
@@ -121,9 +119,9 @@ const AppLayout = ({ children }) => {
 
   if (isNoLayout) return <>{children}</>;
   return (
-    <div className="flex flex-col min-h-screen">
+    <div className="flex flex-col min-h-screen w-full bg-slate-50">
       <Navbar />
-      <main className="flex-grow">{children}</main>
+      <main className="flex-1 w-full flex flex-col">{children}</main>
       <Footer />
     </div>
   );
@@ -144,6 +142,7 @@ function App() {
           <Route path="/stores" element={<StoreList />} />
           <Route path="/store/:id" element={<StoreDetail />} />
           <Route path="/deals" element={<Deals />} />
+          <Route path="/categories" element={<Shop />} />
 
           {/* Customer */}
           <Route path="/cart" element={<ProtectedRoute><CartPage /></ProtectedRoute>} />

@@ -72,6 +72,7 @@ app.use('/api/stock', require('./routes/stockRoutes'));
 app.use('/api/accounts', require('./routes/accountRoutes'));
 app.use('/api/hp', require('./routes/hpRoutes'));
 app.use('/api/loyalty', require('./routes/loyaltyRoutes'));
+app.use('/api/currency', require('./routes/currencyRoutes'));
 
 
 app.use('/api/delivery', require('./routes/deliveryRoutes'));
@@ -82,7 +83,6 @@ app.use('/api/expenses', require('./routes/expenseRoutes'));
 app.use('/api/finance', require('./routes/financeRoutes'));
 app.use('/api/promotions', require('./routes/promotionRoutes'));
 app.use('/api/suppliers', require('./routes/supplierRoutes'));
-app.use('/api/stock', require('./routes/stockRoutes'));
 app.use('/api/returns', require('./routes/returnRoutes'));
 app.use('/api/barcodes', require('./routes/barcodeRoutes'));
 app.use('/api/supplier-payments', require('./routes/supplierPaymentRoutes'));

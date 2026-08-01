@@ -203,11 +203,11 @@ const AdminSettings = () => {
               <h2 className="font-semibold text-dark-navy mb-4">Shop Branding</h2>
               <div className="flex items-center gap-6 mb-6">
                 <div className="w-24 h-24 rounded-2xl border-2 border-dashed border-card-border flex items-center justify-center overflow-hidden bg-gray-50">
-                  {(settings.logoUrl || settings.logo) ? (
-                    <img src={getImageUrl(settings.logoUrl || settings.logo)} alt="Logo" className="w-full h-full object-cover" />
-                  ) : (
-                    <Store size={32} className="text-gray-300" />
-                  )}
+                  <img
+                    src={getImageUrl(settings.logoUrl || settings.logo) || '/logo.png'}
+                    alt="Logo"
+                    className="w-full h-full object-cover"
+                  />
                 </div>
                 <div>
                   <button onClick={() => fileRef.current?.click()} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-xl transition-colors">
@@ -226,7 +226,7 @@ const AdminSettings = () => {
             {/* Footer */}
             <div className="bg-white rounded-2xl border border-card-border p-6 shadow-sm">
               <h2 className="font-semibold text-dark-navy mb-4">Footer</h2>
-              <SettingsInputField label="Footer Text" value={settings.footerText} onChange={(v) => handleChange('footerText', v)} placeholder="© 2026 Mobile Hub. All rights reserved." />
+              <SettingsInputField label="Footer Text" value={settings.footerText} onChange={(v) => handleChange('footerText', v)} placeholder="© 2026 Raxwo (Pvt) LTD. All rights reserved." />
             </div>
 
             {/* Hero Products */}
@@ -935,10 +935,12 @@ const AdminSettings = () => {
         {tab === 'social' && (
           <div className="bg-white rounded-2xl border border-card-border p-6 shadow-sm">
             <h2 className="font-semibold text-dark-navy mb-4 flex items-center gap-2"><Palette size={18} /> Social Media Links</h2>
-            <div className="space-y-4">
-              <SettingsInputField label="Facebook URL" value={settings.socialLinks?.facebook} onChange={(v) => handleSocialChange('facebook', v)} placeholder="https://facebook.com/mobilehubcorner" />
-              <SettingsInputField label="Instagram URL" value={settings.socialLinks?.instagram} onChange={(v) => handleSocialChange('instagram', v)} placeholder="https://instagram.com/mobilehubcorner" />
-              <SettingsInputField label="Twitter URL" value={settings.socialLinks?.twitter} onChange={(v) => handleSocialChange('twitter', v)} placeholder="https://x.com/mobilehub" />
+            <p className="text-xs text-muted-text mb-4">Configure the social media account links displayed in the website footer.</p>
+            <div className="grid sm:grid-cols-2 gap-4">
+              <SettingsInputField label="Facebook Page URL" value={settings.socialLinks?.facebook} onChange={(v) => handleSocialChange('facebook', v)} placeholder="https://facebook.com/yourshop" />
+              <SettingsInputField label="TikTok Account URL" value={settings.socialLinks?.tiktok} onChange={(v) => handleSocialChange('tiktok', v)} placeholder="https://tiktok.com/@yourshop" />
+              <SettingsInputField label="Instagram Profile URL" value={settings.socialLinks?.instagram} onChange={(v) => handleSocialChange('instagram', v)} placeholder="https://instagram.com/yourshop" />
+              <SettingsInputField label="YouTube Channel URL" value={settings.socialLinks?.youtube} onChange={(v) => handleSocialChange('youtube', v)} placeholder="https://youtube.com/@yourshop" />
             </div>
           </div>
         )}
