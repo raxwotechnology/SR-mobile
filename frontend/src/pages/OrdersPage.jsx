@@ -249,7 +249,7 @@ const OrdersPage = () => {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-3">
+                <div className="flex items-center justify-between md:justify-end gap-3 w-full md:w-auto pt-2 md:pt-0 border-t md:border-t-0 border-slate-100 mt-1 md:mt-0">
                   <span className={`text-xs font-bold px-3 py-1 rounded-full capitalize ${statusColor(order.orderStatus)}`}>
                     {order.orderStatus.replace('_', ' ')}
                   </span>

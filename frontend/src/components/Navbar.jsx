@@ -61,8 +61,8 @@ const Navbar = () => {
   const fetchCart = useCartStore((s) => s.fetchCart);
   const { currency, toggleCurrency, fetchRate, getProductPrice } = useCurrencyStore();
   const settings = useSettingsStore((s) => s.settings);
-  const brandName = settings?.shopName || 'Mobile Hub';
-  const brandLogoUrl = getImageUrl(settings?.logoUrl) || '/logo.png';
+  const brandName = 'Mobixa';
+  const brandLogoUrl = '/logo.png';
   const brandPhone = settings?.phone || '+94 11 255 5000';
   const freeDeliveryThreshold = Number(settings?.deliveryFeeThreshold || 5000).toLocaleString();
 
@@ -210,14 +210,13 @@ const Navbar = () => {
       <div className="base-container py-3 flex items-center justify-between gap-4">
         {/* Logo */}
         <Link to="/" className="text-2xl font-black text-slate-900 flex-shrink-0 flex items-center gap-2.5">
-          {brandLogoUrl ? (
-            <img src={brandLogoUrl} alt={brandName} className="w-9 h-9 rounded-xl object-cover shadow-sm" />
-          ) : (
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center text-white text-lg font-bold shadow-md shadow-blue-500/20 shrink-0">
-              {brandName ? brandName.charAt(0) : 'S'}
-            </div>
-          )}
-          <span className="tracking-tight text-slate-900 whitespace-nowrap">{brandName}</span>
+          <img
+            src="/logo.png"
+            alt="Mobixa"
+            className="w-9 h-9 rounded-xl object-cover shadow-sm border border-slate-200"
+            onError={(e) => { e.target.onerror = null; e.target.src = '/logo.png'; }}
+          />
+          <span className="tracking-tight text-slate-900 whitespace-nowrap">Mobixa</span>
         </Link>
 
         {/* Desktop Navigation Links */}

@@ -142,6 +142,7 @@ function App() {
           <Route path="/stores" element={<StoreList />} />
           <Route path="/store/:id" element={<StoreDetail />} />
           <Route path="/deals" element={<Deals />} />
+          <Route path="/categories" element={<Shop />} />
 
           {/* Customer */}
           <Route path="/cart" element={<ProtectedRoute><CartPage /></ProtectedRoute>} />

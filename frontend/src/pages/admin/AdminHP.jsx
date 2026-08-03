@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { 
   Clock, 
   Search, 
@@ -12,7 +12,8 @@ import {
   Printer,
   Download,
   Plus,
-  Trash2
+  Trash2,
+  RotateCcw
 } from 'lucide-react';
 import { getHPRecords, recordHPPayment, deleteHPRecord, getAccounts, getHPById } from '../../services/api';
 import { toast } from 'react-toastify';
@@ -20,11 +21,31 @@ import DashboardLayout from '../../components/DashboardLayout';
 import { adminNavGroups as navItems } from './adminNavItems';
 import DeleteConfirmationModal from '../../components/DeleteConfirmationModal';
 
+const MONTHS = [
+  { value: 'all', label: 'All Months' },
+  { value: '1', label: 'January' },
+  { value: '2', label: 'February' },
+  { value: '3', label: 'March' },
+  { value: '4', label: 'April' },
+  { value: '5', label: 'May' },
+  { value: '6', label: 'June' },
+  { value: '7', label: 'July' },
+  { value: '8', label: 'August' },
+  { value: '9', label: 'September' },
+  { value: '10', label: 'October' },
+  { value: '11', label: 'November' },
+  { value: '12', label: 'December' },
+];
+
 const AdminHP = () => {
   const [records, setRecords] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [selectedYear, setSelectedYear] = useState('all');
+  const [selectedMonth, setSelectedMonth] = useState('all');
+  const [sortBy, setSortBy] = useState('newest'); // 'newest' (default) or 'oldest'
+
   const [showPayModal, setShowPayModal] = useState(false);
   const [selectedHP, setSelectedHP] = useState(null);
   
@@ -39,22 +60,70 @@ const AdminHP = () => {
   useEffect(() => {
     fetchData();
     fetchAccounts();
-  }, [statusFilter]);
+  }, [statusFilter, selectedYear, selectedMonth]);
 
   const fetchData = async () => {
     try {
       setLoading(true);
       const { data } = await getHPRecords({ 
         status: statusFilter === 'all' ? undefined : statusFilter,
-        search: search || undefined
+        search: search || undefined,
+        year: selectedYear === 'all' ? undefined : selectedYear,
+        month: selectedMonth === 'all' ? undefined : selectedMonth
       });
-      setRecords(data);
+      setRecords(data || []);
     } catch (err) {
       toast.error('Failed to load installment records');
     } finally {
       setLoading(false);
     }
   };
+
+  const availableYears = useMemo(() => {
+    const yearsSet = new Set();
+    const currentYear = new Date().getFullYear();
+    yearsSet.add(currentYear);
+    yearsSet.add(currentYear - 1);
+    yearsSet.add(currentYear - 2);
+
+    records.forEach(r => {
+      const d = new Date(r.startDate || r.createdAt);
+      if (!isNaN(d.getFullYear())) {
+        yearsSet.add(d.getFullYear());
+      }
+    });
+
+    return Array.from(yearsSet).sort((a, b) => b - a);
+  }, [records]);
+
+  const sortedAndFilteredRecords = useMemo(() => {
+    let result = [...records];
+
+    // Year filter (client safeguard)
+    if (selectedYear !== 'all') {
+      result = result.filter(r => {
+        const d = new Date(r.startDate || r.createdAt);
+        return d.getFullYear().toString() === selectedYear;
+      });
+    }
+
+    // Month filter (client safeguard)
+    if (selectedMonth !== 'all') {
+      result = result.filter(r => {
+        const d = new Date(r.startDate || r.createdAt);
+        return (d.getMonth() + 1).toString() === selectedMonth;
+      });
+    }
+
+    // Sort order: default 'newest' (latest installment at top)
+    result.sort((a, b) => {
+      const dateA = new Date(a.startDate || a.createdAt).getTime();
+      const dateB = new Date(b.startDate || b.createdAt).getTime();
+      return sortBy === 'newest' ? dateB - dateA : dateA - dateB;
+    });
+
+    return result;
+  }, [records, selectedYear, selectedMonth, sortBy]);
 
   const fetchAccounts = async () => {
     try {
@@ -141,7 +210,7 @@ const AdminHP = () => {
           <div className="flex items-center gap-3">
             <button 
               onClick={fetchData} 
-              className="flex items-center gap-2 px-4 py-2 bg-white border border-card-border rounded-xl text-sm font-medium hover:bg-slate-50 transition-all"
+              className="flex items-center gap-2 px-4 py-2 bg-white border border-card-border rounded-xl text-sm font-medium hover:bg-slate-50 transition-all shadow-sm"
             >
               Refresh List
             </button>
@@ -151,10 +220,10 @@ const AdminHP = () => {
         {/* Stats */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           {[
-            { label: 'Active Credit Sales', value: records.filter(r => r.status === 'Active').length, icon: Clock, color: 'text-primary-blue', bg: 'bg-indigo-50' },
-            { label: 'Total Outstanding Balance', value: `Rs. ${records.reduce((s, r) => s + (r.balanceAmount), 0).toLocaleString()}`, icon: CreditCard, color: 'text-amber-600', bg: 'bg-amber-50' },
-            { label: 'Completed Agreements', value: records.filter(r => r.status === 'Completed').length, icon: CheckCircle, color: 'text-emerald-600', bg: 'bg-emerald-50' },
-            { label: 'Overdue Payments', value: records.filter(r => r.status === 'Overdue').length, icon: AlertCircle, color: 'text-rose-600', bg: 'bg-rose-50' },
+            { label: 'Active Credit Sales', value: sortedAndFilteredRecords.filter(r => r.status === 'Active').length, icon: Clock, color: 'text-primary-blue', bg: 'bg-indigo-50' },
+            { label: 'Total Outstanding Balance', value: `Rs. ${sortedAndFilteredRecords.reduce((s, r) => s + (r.balanceAmount), 0).toLocaleString()}`, icon: CreditCard, color: 'text-amber-600', bg: 'bg-amber-50' },
+            { label: 'Completed Agreements', value: sortedAndFilteredRecords.filter(r => r.status === 'Completed').length, icon: CheckCircle, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+            { label: 'Overdue Payments', value: sortedAndFilteredRecords.filter(r => r.status === 'Overdue').length, icon: AlertCircle, color: 'text-rose-600', bg: 'bg-rose-50' },
           ].map((stat, i) => (
             <div key={i} className="bg-white p-6 rounded-2xl border border-card-border shadow-sm flex items-center gap-4 hover:shadow-md transition-all">
               <div className={`p-3 rounded-xl ${stat.bg} ${stat.color}`}>
@@ -171,8 +240,8 @@ const AdminHP = () => {
         {/* Filters & Table */}
         <div className="bg-white rounded-3xl border border-card-border shadow-sm overflow-hidden">
           <div className="p-5 border-b border-card-border flex flex-wrap items-center justify-between gap-4 bg-slate-50/50">
-            <div className="flex items-center gap-4 flex-1 min-w-[300px]">
-              <div className="relative flex-1">
+            <div className="flex flex-wrap items-center gap-3 flex-1 min-w-[300px]">
+              <div className="relative flex-1 min-w-[240px]">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                 <input 
                   type="text" 
@@ -183,16 +252,69 @@ const AdminHP = () => {
                   onKeyDown={(e) => e.key === 'Enter' && fetchData()}
                 />
               </div>
+              
+              {/* Status Filter */}
               <select 
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                className="px-4 py-2.5 bg-white border border-card-border rounded-xl text-sm font-medium focus:outline-none"
+                className="px-3.5 py-2.5 bg-white border border-card-border rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary-blue/20"
               >
                 <option value="all">All Status</option>
                 <option value="Active">Active</option>
                 <option value="Completed">Completed</option>
                 <option value="Overdue">Overdue</option>
               </select>
+
+              {/* Year Filter */}
+              <select
+                value={selectedYear}
+                onChange={(e) => setSelectedYear(e.target.value)}
+                className="px-3.5 py-2.5 bg-white border border-card-border rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary-blue/20"
+              >
+                <option value="all">All Years</option>
+                {availableYears.map(y => (
+                  <option key={y} value={y.toString()}>{y}</option>
+                ))}
+              </select>
+
+              {/* Month Filter */}
+              <select
+                value={selectedMonth}
+                onChange={(e) => setSelectedMonth(e.target.value)}
+                className="px-3.5 py-2.5 bg-white border border-card-border rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary-blue/20"
+              >
+                {MONTHS.map(m => (
+                  <option key={m.value} value={m.value}>{m.label}</option>
+                ))}
+              </select>
+
+              {/* Sort Order (Default Latest First) */}
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+                className="px-3.5 py-2.5 bg-white border border-card-border rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary-blue/20 text-slate-700"
+              >
+                <option value="newest">Latest Installments First</option>
+                <option value="oldest">Oldest First</option>
+              </select>
+
+              {/* Reset Filters */}
+              {(statusFilter !== 'all' || selectedYear !== 'all' || selectedMonth !== 'all' || search || sortBy !== 'newest') && (
+                <button
+                  onClick={() => {
+                    setStatusFilter('all');
+                    setSelectedYear('all');
+                    setSelectedMonth('all');
+                    setSearch('');
+                    setSortBy('newest');
+                  }}
+                  className="px-3 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all"
+                  title="Reset Filters"
+                >
+                  <RotateCcw size={14} />
+                  Reset
+                </button>
+              )}
             </div>
           </div>
 
@@ -217,9 +339,9 @@ const AdminHP = () => {
               <tbody className="divide-y divide-card-border">
                 {loading ? (
                   <tr><td colSpan="12" className="py-20 text-center"><span className="pos-spinner-sm" /></td></tr>
-                ) : records.length === 0 ? (
+                ) : sortedAndFilteredRecords.length === 0 ? (
                   <tr><td colSpan="12" className="py-20 text-center text-slate-400 font-medium">No installment plans found</td></tr>
-                ) : records.map((record) => (
+                ) : sortedAndFilteredRecords.map((record) => (
                   <tr key={record._id} className="hover:bg-slate-50/50 transition-all group">
                     <td className="px-4 py-4">
                       <div>

@@ -935,10 +935,12 @@ const AdminSettings = () => {
         {tab === 'social' && (
           <div className="bg-white rounded-2xl border border-card-border p-6 shadow-sm">
             <h2 className="font-semibold text-dark-navy mb-4 flex items-center gap-2"><Palette size={18} /> Social Media Links</h2>
-            <div className="space-y-4">
-              <SettingsInputField label="Facebook URL" value={settings.socialLinks?.facebook} onChange={(v) => handleSocialChange('facebook', v)} placeholder="https://facebook.com/mobilehubcorner" />
-              <SettingsInputField label="Instagram URL" value={settings.socialLinks?.instagram} onChange={(v) => handleSocialChange('instagram', v)} placeholder="https://instagram.com/mobilehubcorner" />
-              <SettingsInputField label="Twitter URL" value={settings.socialLinks?.twitter} onChange={(v) => handleSocialChange('twitter', v)} placeholder="https://x.com/mobilehub" />
+            <p className="text-xs text-muted-text mb-4">Configure the social media account links displayed in the website footer.</p>
+            <div className="grid sm:grid-cols-2 gap-4">
+              <SettingsInputField label="Facebook Page URL" value={settings.socialLinks?.facebook} onChange={(v) => handleSocialChange('facebook', v)} placeholder="https://facebook.com/yourshop" />
+              <SettingsInputField label="TikTok Account URL" value={settings.socialLinks?.tiktok} onChange={(v) => handleSocialChange('tiktok', v)} placeholder="https://tiktok.com/@yourshop" />
+              <SettingsInputField label="Instagram Profile URL" value={settings.socialLinks?.instagram} onChange={(v) => handleSocialChange('instagram', v)} placeholder="https://instagram.com/yourshop" />
+              <SettingsInputField label="YouTube Channel URL" value={settings.socialLinks?.youtube} onChange={(v) => handleSocialChange('youtube', v)} placeholder="https://youtube.com/@yourshop" />
             </div>
           </div>
         )}

@@ -8,7 +8,7 @@ const { recordTransaction } = require('../services/ledgerService');
 // @access  Private/Admin/Manager
 const getHPRecords = async (req, res, next) => {
   try {
-    const { status, storeId, search } = req.query;
+    const { status, storeId, search, year, month } = req.query;
     const filter = {};
     
     if (req.user.role === 'manager') {
@@ -27,10 +27,36 @@ const getHPRecords = async (req, res, next) => {
       ];
     }
 
+    if (year && year !== 'all') {
+      const y = parseInt(year);
+      let startDateRange, endDateRange;
+      if (month && month !== 'all') {
+        const m = parseInt(month) - 1;
+        startDateRange = new Date(y, m, 1);
+        endDateRange = new Date(y, m + 1, 0, 23, 59, 59, 999);
+      } else {
+        startDateRange = new Date(y, 0, 1);
+        endDateRange = new Date(y, 11, 31, 23, 59, 59, 999);
+      }
+      filter.$or = [
+        { startDate: { $gte: startDateRange, $lte: endDateRange } },
+        { createdAt: { $gte: startDateRange, $lte: endDateRange } }
+      ];
+    } else if (month && month !== 'all') {
+      const currentYear = new Date().getFullYear();
+      const m = parseInt(month) - 1;
+      const startDateRange = new Date(currentYear, m, 1);
+      const endDateRange = new Date(currentYear, m + 1, 0, 23, 59, 59, 999);
+      filter.$or = [
+        { startDate: { $gte: startDateRange, $lte: endDateRange } },
+        { createdAt: { $gte: startDateRange, $lte: endDateRange } }
+      ];
+    }
+
     const records = await HirePurchase.find(filter)
       .populate('orderId')
       .populate('createdBy', 'name')
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1, startDate: -1 });
       
     res.json(records);
   } catch (error) { next(error); }

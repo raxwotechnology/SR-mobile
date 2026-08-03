@@ -28,6 +28,8 @@ const settingsSchema = new mongoose.Schema({
     facebook: { type: String, default: '' },
     instagram: { type: String, default: '' },
     twitter: { type: String, default: '' },
+    tiktok: { type: String, default: '' },
+    youtube: { type: String, default: '' },
   },
   footerText: { type: String, default: '© 2026 Raxwo (Pvt) LTD. All rights reserved.' },
   heroProducts: [{

@@ -58,6 +58,11 @@ export const isDirectImageUrl = (url) => {
 export const getImageUrl = (path) => {
   if (!path) return '';
   const trimmed = String(path).trim();
+
+  // Public static frontend assets (e.g. /logo.png, /favicon.png)
+  if (trimmed === '/logo.png' || trimmed === 'logo.png' || trimmed.startsWith('/favicon') || trimmed.startsWith('/assets/')) {
+    return trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+  }
   
   // 1. Try to auto-convert known external page links (Drive, Unsplash, etc.)
   const converted = convertExternalUrl(trimmed);
