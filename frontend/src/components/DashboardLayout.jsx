@@ -10,10 +10,13 @@ import { getImageUrl } from '../utils/imageHelper';
 
 // ─── Shared NavLink ────────────────────────────────────────────────────────────
 const NavLink = ({ item, location, collapsed, onNavigate }) => {
+  const fullPath = location.pathname + location.search;
   const isRoot = item.path === '/admin' || item.path === '/manager' || item.path === '/employee';
   const isActive = isRoot
     ? location.pathname === item.path
-    : location.pathname === item.path || location.pathname.startsWith(`${item.path}/`);
+    : item.path.includes('?')
+      ? fullPath === item.path
+      : location.pathname === item.path && !location.search;
 
   return (
     <Link
@@ -193,12 +196,12 @@ const DashboardLayout = ({ children, navItems, title }) => {
         <div className="flex-1" />
 
         {isAdminNav && user?.role === 'admin' && (
-          <div className="hidden sm:flex items-center gap-2 mr-2">
-            <span className="text-xs font-semibold text-slate-500 uppercase tracking-widest">Store Context:</span>
+          <div className="flex items-center gap-1.5 sm:gap-2 mr-1 sm:mr-2">
+            <span className="hidden md:inline text-xs font-semibold text-slate-500 uppercase tracking-widest">Store Context:</span>
             <select
               value={selectedStoreId}
               onChange={(e) => setSelectedStoreId(e.target.value)}
-              className="border border-slate-200 rounded-xl py-1.5 px-3 text-sm font-semibold text-blue-600 bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+              className="border border-slate-200 rounded-xl py-1 px-2 sm:py-1.5 sm:px-3 text-xs sm:text-sm font-semibold text-blue-600 bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer max-w-[130px] sm:max-w-none"
             >
               <option value="all">Global (All Stores)</option>
               {stores.map(s => <option key={s._id} value={s._id}>{s.name}</option>)}

@@ -24,8 +24,28 @@ const reloadSchema = new mongoose.Schema(
     },
     type: {
       type: String,
-      enum: ['Prepaid', 'Postpaid', 'Bill Payment'],
+      enum: ['Prepaid', 'Postpaid', 'Bill Payment', 'Scratch Card'],
       default: 'Prepaid',
+    },
+    profitPercentage: {
+      type: Number,
+      default: 4,
+    },
+    profitAmount: {
+      type: Number,
+      default: 0,
+    },
+    quantity: {
+      type: Number,
+      default: 1,
+      min: 1,
+    },
+    cardDenomination: {
+      type: Number,
+    },
+    isCard: {
+      type: Boolean,
+      default: false,
     },
     paymentMethod: {
       type: String,

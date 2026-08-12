@@ -260,12 +260,14 @@ const InvoiceModal = ({ isOpen, onClose, order, onNewSale }) => {
                         <div style={{ fontWeight: 700, textAlign: 'right' }}>Rs. {(order.hirePurchaseData?.interestAmount || 0).toLocaleString()}</div>
 
                         <div>Plan Duration:</div>
-                        <div style={{ textAlign: 'right' }}>{order.hirePurchaseData?.numberOfInstallments || 'N/A'} Months</div>
+                        <div style={{ textAlign: 'right' }}>{order.hirePurchaseData?.numberOfInstallments !== undefined ? `${order.hirePurchaseData.numberOfInstallments} Months` : 'N/A'}</div>
 
                         <div style={{ gridColumn: 'span 2', borderTop: '1px dashed #fde68a', margin: '4px 0' }} />
 
                         <div style={{ fontWeight: 800 }}>Installment:</div>
-                        <div style={{ fontWeight: 900, fontSize: '13px', color: '#b45309', textAlign: 'right' }}>Rs. {(order.hirePurchaseData?.installmentAmount || 0).toLocaleString()}/month</div>
+                        <div style={{ fontWeight: 900, fontSize: '13px', color: '#b45309', textAlign: 'right' }}>
+                          Rs. {(order.hirePurchaseData?.installmentAmount || 0).toLocaleString()}/month
+                        </div>
                       </div>
                     </div>
                   )}
@@ -517,13 +519,19 @@ const InvoiceModal = ({ isOpen, onClose, order, onNewSale }) => {
                       <span>Down Payment:</span>
                       <span style={{ fontWeight: 700 }}>Rs. {(order.hirePurchaseData?.downPayment || order.tenderedAmount || 0).toFixed(2)}</span>
                     </div>
+                    {(order.hirePurchaseData?.interestAmount || 0) > 0 && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', marginBottom: '4px', color: '#92400e' }}>
+                        <span>Interest Added:</span>
+                        <span style={{ fontWeight: 700 }}>Rs. {(order.hirePurchaseData?.interestAmount || 0).toFixed(2)}</span>
+                      </div>
+                    )}
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', marginBottom: '4px', color: '#92400e' }}>
                       <span>Terms:</span>
-                      <span>{order.hirePurchaseData?.numberOfInstallments || 'N/A'} Months</span>
+                      <span>{order.hirePurchaseData?.numberOfInstallments !== undefined ? `${order.hirePurchaseData.numberOfInstallments} Months` : 'N/A'}</span>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', fontWeight: 800, color: '#b45309', marginTop: '4px', borderTop: '1px dashed #fde68a', paddingTop: '4px' }}>
                       <span>Installment:</span>
-                      <span>Rs. {(order.hirePurchaseData?.installmentAmount || 0).toFixed(2)}</span>
+                      <span>Rs. {(order.hirePurchaseData?.installmentAmount || 0).toFixed(2)}/month</span>
                     </div>
                   </div>
                 )}

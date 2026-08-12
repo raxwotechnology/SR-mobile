@@ -64,7 +64,7 @@ const AdminProducts = () => {
 
   const openCreate = () => {
     setEditingId(null);
-    setForm({ ...emptyForm, storeId: selectedStoreId !== 'all' ? selectedStoreId : '' });
+    setForm({ ...emptyForm, storeId: selectedStoreId !== 'all' ? selectedStoreId : (stores[0]?._id || '') });
     setShowModal(true);
   };
 
@@ -471,25 +471,18 @@ const AdminProducts = () => {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-dark-navy mb-1">Supplier</label>
-                    <input 
-                      list="supplier-suggestions"
-                      placeholder="Search or select supplier"
-                      value={form.supplierId === 'none' ? 'None' : (suppliers.find(s => s._id === form.supplierId)?.name || form.supplierId || '')}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        if (val.toLowerCase() === 'none' || val === '') {
-                          setForm({ ...form, supplierId: 'none' });
-                        } else {
-                          const existing = suppliers.find(s => s.name.toLowerCase() === val.toLowerCase());
-                          setForm({ ...form, supplierId: existing ? existing._id : val });
-                        }
-                      }}
-                      className="w-full border border-card-border rounded-xl py-2.5 px-4 text-sm" 
-                    />
-                    <datalist id="supplier-suggestions">
-                      <option value="None" />
-                      {suppliers.map((s) => <option key={s._id} value={s.name}>{s.company}</option>)}
-                    </datalist>
+                    <select 
+                      value={form.supplierId || ''}
+                      onChange={(e) => setForm({ ...form, supplierId: e.target.value })}
+                      className="w-full border border-card-border rounded-xl py-2.5 px-4 text-sm bg-white font-medium focus:outline-none focus:ring-2 focus:ring-primary-blue cursor-pointer"
+                    >
+                      <option value="">None (No Supplier)</option>
+                      {suppliers.map((s) => (
+                        <option key={s._id} value={s._id}>
+                          {s.name} {s.company ? `(${s.company})` : ''}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-dark-navy mb-1">Unit</label>

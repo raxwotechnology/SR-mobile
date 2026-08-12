@@ -393,11 +393,90 @@ const updateOrderAdmin = async (req, res, next) => {
       res.status(404);
       return next(new Error('Order not found'));
     }
-    const { customerName, customerPhone, orderStatus, paymentStatus } = req.body;
+
+    const {
+      customerName,
+      customerPhone,
+      customerNic,
+      customerAddress,
+      orderStatus,
+      paymentStatus,
+      paymentMethod,
+      items,
+      discountAmount,
+      deliveryFee,
+      tax,
+      amountPaid,
+    } = req.body;
+
+    // Handle stock adjustments if order items list is updated
+    if (Array.isArray(items)) {
+      // Map of existing quantities per product
+      const oldQtyMap = new Map();
+      (order.items || []).forEach((item) => {
+        const pId = item.productId ? item.productId.toString() : null;
+        if (pId) {
+          oldQtyMap.set(pId, (oldQtyMap.get(pId) || 0) + Number(item.quantity || 0));
+        }
+      });
+
+      // Map of new quantities per product
+      const newQtyMap = new Map();
+      items.forEach((item) => {
+        const pId = item.productId ? item.productId.toString() : null;
+        if (pId) {
+          newQtyMap.set(pId, (newQtyMap.get(pId) || 0) + Number(item.quantity || 0));
+        }
+      });
+
+      const allProductIds = new Set([...oldQtyMap.keys(), ...newQtyMap.keys()]);
+
+      for (const pId of allProductIds) {
+        const oldQty = oldQtyMap.get(pId) || 0;
+        const newQty = newQtyMap.get(pId) || 0;
+        const diff = newQty - oldQty; // positive means additional stock needed
+
+        if (diff !== 0) {
+          if (diff > 0) {
+            const product = await Product.findById(pId);
+            if (product && product.stock < diff) {
+              res.status(400);
+              return next(new Error(`Insufficient stock for "${product.name}". Available: ${product.stock}, required: +${diff}`));
+            }
+          }
+          await Product.findByIdAndUpdate(pId, { $inc: { stock: -diff } });
+        }
+      }
+
+      order.items = items.map((item) => ({
+        productId: item.productId,
+        name: item.name,
+        image: item.image,
+        quantity: Number(item.quantity || 1),
+        price: Number(item.price || 0),
+        imei: Array.isArray(item.imei) ? item.imei : (item.imei ? [item.imei] : [])
+      }));
+    }
+
     if (customerName !== undefined) order.customerName = customerName;
     if (customerPhone !== undefined) order.customerPhone = customerPhone;
+    if (customerNic !== undefined) order.customerNic = customerNic;
+    if (customerAddress !== undefined) order.customerAddress = customerAddress;
     if (orderStatus !== undefined) order.orderStatus = orderStatus;
     if (paymentStatus !== undefined) order.paymentStatus = paymentStatus;
+    if (paymentMethod !== undefined) order.paymentMethod = paymentMethod;
+    if (discountAmount !== undefined) order.discountAmount = Number(discountAmount || 0);
+    if (deliveryFee !== undefined) order.deliveryFee = Number(deliveryFee || 0);
+    if (tax !== undefined) order.tax = Number(tax || 0);
+    if (amountPaid !== undefined) order.amountPaid = Number(amountPaid || 0);
+
+    // Recalculate total amount
+    const itemsSubtotal = (order.items || []).reduce((sum, i) => sum + (Number(i.price || 0) * Number(i.quantity || 0)), 0);
+    order.totalAmount = Math.max(0, itemsSubtotal - (order.discountAmount || 0) + (order.deliveryFee || 0) + (order.tax || 0));
+
+    if (order.isCredit) {
+      order.creditBalance = Math.max(0, order.totalAmount - (order.amountPaid || 0));
+    }
 
     const saved = await order.save();
     res.json(saved);

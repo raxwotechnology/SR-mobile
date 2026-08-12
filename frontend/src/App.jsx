@@ -40,6 +40,7 @@ import AdminReports from './pages/admin/AdminReports';
 import AdminSettings from './pages/admin/AdminSettings';
 import AdminExpenses from './pages/admin/AdminExpenses';
 import AdminFinancials from './pages/admin/AdminFinancials';
+import AdminBalanceReport from './pages/admin/AdminBalanceReport';
 import AdminProfitReports from './pages/admin/AdminProfitReports';
 import AdminInventory from './pages/admin/AdminInventory';
 import AdminPromotions from './pages/admin/AdminPromotions';
@@ -183,7 +184,8 @@ function App() {
           <Route path="/admin/settings" element={<ProtectedRoute roles={['admin']} permission="settings"><AdminSettings /></ProtectedRoute>} />
           <Route path="/admin/expenses" element={<ProtectedRoute roles={['admin']} permission="finance"><AdminExpenses /></ProtectedRoute>} />
           <Route path="/admin/financials" element={<ProtectedRoute roles={['admin']} permission="finance"><AdminFinancials /></ProtectedRoute>} />
-          <Route path="/admin/profit-reports" element={<ProtectedRoute roles={['admin']} permission="finance"><AdminProfitReports /></ProtectedRoute>} />
+          <Route path="/admin/balance-report" element={<ProtectedRoute roles={['admin']} permission="finance"><AdminBalanceReport /></ProtectedRoute>} />
+          <Route path="/admin/profit-reports" element={<Navigate to="/admin/financials?tab=profit" replace />} />
           <Route path="/admin/promotions" element={<ProtectedRoute roles={['admin']} permission="sales"><AdminPromotions /></ProtectedRoute>} />
           <Route path="/admin/barcodes" element={<ProtectedRoute roles={['admin']} permission="products"><AdminBarcodes /></ProtectedRoute>} />
           <Route path="/admin/supplier-payments" element={<ProtectedRoute roles={['admin']} permission="suppliers"><AdminSupplierPayments /></ProtectedRoute>} />

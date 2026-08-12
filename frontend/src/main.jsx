@@ -3,6 +3,22 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.jsx'
 
+// Prevent mouse wheel from changing number input values globally
+document.addEventListener('wheel', () => {
+  if (document.activeElement && document.activeElement.type === 'number') {
+    document.activeElement.blur();
+  }
+}, { passive: true });
+
+// Auto-select number input content on click/focus so typing replaces existing 0 immediately
+document.addEventListener('focusin', (e) => {
+  if (e.target && e.target.tagName === 'INPUT' && e.target.type === 'number') {
+    setTimeout(() => {
+      try { e.target.select(); } catch {}
+    }, 10);
+  }
+});
+
 class ErrorBoundary extends React.Component {
   constructor(props) {
     super(props);

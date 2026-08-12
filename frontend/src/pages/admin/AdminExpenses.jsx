@@ -70,7 +70,7 @@ const AdminExpenses = () => {
 
   const openCreate = () => {
     setEditingId(null);
-    setForm({ ...emptyForm, type: activeTab, category: activeTab === 'expense' ? 'Utilities' : 'Sales', storeId: selectedStoreId !== 'all' ? selectedStoreId : '' });
+    setForm({ ...emptyForm, type: activeTab, category: activeTab === 'expense' ? 'Utilities' : 'Sales', storeId: selectedStoreId !== 'all' ? selectedStoreId : (stores[0]?._id || '') });
     setShowModal(true);
   };
 

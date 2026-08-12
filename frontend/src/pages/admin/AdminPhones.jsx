@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Plus, Edit2, Trash2, Search, X, ChevronDown, ChevronUp, Package, Eye, Smartphone, Cpu, HardDrive, Palette, ShieldCheck, Tag, Upload, ImageIcon } from 'lucide-react';
+import { Plus, Edit2, Trash2, Search, X, ChevronDown, ChevronUp, Package, Eye, Smartphone, Cpu, HardDrive, Palette, ShieldCheck, Tag, Upload, ImageIcon, Copy, Check, List, Hash } from 'lucide-react';
 import DashboardLayout from '../../components/DashboardLayout';
 import { getAdminProducts, getCategories, getStores, createProduct, updateProduct, deleteProduct, getSuppliers, uploadImage, getNextSku } from '../../services/api';
 import { toast } from 'react-toastify';
@@ -85,7 +85,7 @@ const AdminPhones = () => {
     const initialCatId = phoneCat ? phoneCat._id : '';
     setForm({ 
       ...emptyForm, 
-      storeId: selectedStoreId !== 'all' ? selectedStoreId : '',
+      storeId: selectedStoreId !== 'all' ? selectedStoreId : (stores[0]?._id || ''),
       categoryId: initialCatId
     });
     setUploadedImages([]);
@@ -146,6 +146,20 @@ const AdminPhones = () => {
     toast.success('Image URL added!');
   };
 
+  const handleImeiChange = (e) => {
+    const val = e.target.value;
+    const imeiList = val
+      .split(/[\n,;\s]+/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+    setForm((prev) => ({
+      ...prev,
+      imei: val,
+      stock: imeiList.length > 0 ? imeiList.length : (val.trim() === '' ? 0 : prev.stock)
+    }));
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSaving(true);
@@ -167,18 +181,16 @@ const AdminPhones = () => {
         return;
       }
 
-      // Validate supplier if configured
-      let supplierId = form.supplierId;
-      if (supplierId && supplierId !== 'none') {
-        const supplierExists = suppliers.find(s => s._id === supplierId);
-        if (!supplierExists) {
-          toast.error('Please select a valid supplier from the suggestions, or select "None"');
-          setSaving(false);
-          return;
-        }
-      } else {
-        supplierId = null;
+      // Enforce IMEI requirement
+      const parsedImeis = form.imei ? form.imei.split(/[\n,;\s]+/).map((s) => s.trim()).filter(Boolean) : [];
+      if (parsedImeis.length === 0) {
+        toast.error('IMEI number is required. Please enter at least one IMEI number.');
+        setSaving(false);
+        return;
       }
+
+      // Supplier ID processing
+      const supplierId = (form.supplierId && form.supplierId !== 'none') ? form.supplierId : null;
 
       // Enforce minimum price check
       if (form.minPrice && Number(form.price) < Number(form.minPrice)) {
@@ -197,7 +209,7 @@ const AdminPhones = () => {
         purchasePrice: Number(form.purchasePrice) || 0,
         images: finalImages,
         supplierId,
-        imei: form.imei ? form.imei.split(',').map((s) => s.trim()).filter(Boolean) : [],
+        imei: parsedImeis,
       };
       
       if (editingId) {
@@ -232,7 +244,14 @@ const AdminPhones = () => {
     }
   };
 
+  const POPULAR_BRANDS = [
+    'Apple', 'Samsung', 'Xiaomi', 'Redmi', 'POCO', 'Realme', 'Vivo', 'Oppo',
+    'OnePlus', 'Google Pixel', 'Honor', 'Nokia', 'Infinix', 'Tecno', 'Motorola',
+    'Sony', 'Huawei', 'ZTE', 'Asus', 'Nothing', 'Lava', 'Micromax', 'HTC', 'Lenovo'
+  ];
+
   const brands = [...new Set(products.map(p => p.brand).filter(Boolean))];
+  const allBrandOptions = Array.from(new Set([...POPULAR_BRANDS, ...brands].filter(Boolean))).sort();
 
   const filtered = products.filter((p) => {
     const matchesSearch = (p?.name || '').toLowerCase().includes(search.toLowerCase()) || 
@@ -449,14 +468,59 @@ const AdminPhones = () => {
                                   <div className="flex justify-between"><span>Condition:</span> <span className="font-bold uppercase text-emerald-600">{product.condition}</span></div>
                                 </div>
                               </div>
-                              <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
-                                <h4 className="text-xs font-bold text-dark-navy mb-3 flex items-center gap-1"><ShieldCheck size={12} /> Warranty & Identity</h4>
-                                <div className="space-y-2 text-xs">
-                                  <div className="flex justify-between"><span>Warranty:</span> <span className="font-bold">{product.warranty || '-'}</span></div>
-                                  <div className="flex justify-between"><span>IMEI(s):</span> <span className="font-mono text-[10px]">{product.imei?.join(', ') || '-'}</span></div>
-                                  <div className="flex justify-between"><span>Model No:</span> <span className="font-bold">{product.modelNumber || '-'}</span></div>
-                                  {product.sku && <div className="flex justify-between items-center"><span>SKU:</span> <span className="font-mono font-bold bg-indigo-50 text-primary-blue px-2 py-0.5 rounded">{product.sku}</span></div>}
-                                  {product.barcode && <div className="flex justify-between"><span>Barcode:</span> <span className="font-mono text-[10px]">{product.barcode}</span></div>}
+                              <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex flex-col justify-between">
+                                <div>
+                                  <h4 className="text-xs font-bold text-dark-navy mb-3 flex items-center justify-between">
+                                    <span className="flex items-center gap-1"><ShieldCheck size={12} /> Warranty & Identity</span>
+                                    <span className="text-[10px] bg-indigo-50 text-primary-blue font-bold px-2 py-0.5 rounded-full border border-indigo-100">
+                                      {product.imei?.length || 0} IMEIs
+                                    </span>
+                                  </h4>
+                                  <div className="space-y-2 text-xs">
+                                    <div className="flex justify-between"><span>Warranty:</span> <span className="font-bold">{product.warranty || '-'}</span></div>
+                                    <div className="flex justify-between"><span>Model No:</span> <span className="font-bold">{product.modelNumber || '-'}</span></div>
+                                    {product.sku && <div className="flex justify-between items-center"><span>SKU:</span> <span className="font-mono font-bold bg-indigo-50 text-primary-blue px-2 py-0.5 rounded">{product.sku}</span></div>}
+                                    {product.barcode && <div className="flex justify-between"><span>Barcode:</span> <span className="font-mono text-[10px]">{product.barcode}</span></div>}
+                                  </div>
+                                </div>
+
+                                <div className="mt-3 pt-3 border-t border-gray-100">
+                                  <div className="flex items-center justify-between mb-1.5">
+                                    <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Registered IMEIs</span>
+                                    {product.imei && product.imei.length > 0 && (
+                                      <button 
+                                        type="button"
+                                        onClick={() => {
+                                          navigator.clipboard.writeText(product.imei.join('\n'));
+                                          toast.success(`Copied ${product.imei.length} IMEIs to clipboard!`);
+                                        }}
+                                        className="text-[10px] text-primary-blue font-bold hover:underline flex items-center gap-1 bg-indigo-50 hover:bg-indigo-100 px-2 py-0.5 rounded transition-all"
+                                      >
+                                        <Copy size={10} /> Copy All
+                                      </button>
+                                    )}
+                                  </div>
+                                  {product.imei && product.imei.length > 0 ? (
+                                    <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto p-2 bg-slate-50 border border-slate-200/80 rounded-xl">
+                                      {product.imei.map((num, idx) => (
+                                        <span 
+                                          key={idx} 
+                                          onClick={() => {
+                                            navigator.clipboard.writeText(num);
+                                            toast.success(`IMEI #${idx + 1} copied!`);
+                                          }}
+                                          className="cursor-pointer bg-white border border-slate-200 hover:border-primary-blue/50 text-slate-700 font-mono text-[10px] px-2 py-0.5 rounded-md shadow-2xs flex items-center gap-1 transition-all group"
+                                          title="Click to copy IMEI"
+                                        >
+                                          <span className="bg-indigo-50 text-primary-blue text-[8px] font-bold px-1 rounded">#{idx + 1}</span>
+                                          <span>{num}</span>
+                                          <Copy size={9} className="opacity-0 group-hover:opacity-100 text-primary-blue transition-opacity" />
+                                        </span>
+                                      ))}
+                                    </div>
+                                  ) : (
+                                    <span className="text-[10px] text-gray-400 italic">No IMEIs registered</span>
+                                  )}
                                 </div>
                               </div>
                               <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
@@ -514,7 +578,19 @@ const AdminPhones = () => {
                     </div>
                     <div>
                       <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5">Brand / Manufacturer *</label>
-                      <input required value={form.brand} onChange={(e) => setForm({ ...form, brand: e.target.value })} className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-4 text-sm focus:bg-white focus:ring-2 focus:ring-primary-blue transition-all" placeholder="e.g. Apple, Samsung, Xiaomi" />
+                      <input 
+                        list="brand-suggestions"
+                        required
+                        placeholder="Type or select Brand"
+                        value={form.brand}
+                        onChange={(e) => setForm({ ...form, brand: e.target.value })}
+                        className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-4 text-sm focus:bg-white focus:ring-2 focus:ring-primary-blue transition-all" 
+                      />
+                      <datalist id="brand-suggestions">
+                        {allBrandOptions.map((b) => (
+                          <option key={b} value={b} />
+                        ))}
+                      </datalist>
                     </div>
                     <div>
                       <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5">Model Number</label>
@@ -655,9 +731,81 @@ const AdminPhones = () => {
                         <option value="refurbished">Refurbished</option>
                       </select>
                     </div>
-                    <div className="md:col-span-2">
-                      <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5">IMEI Numbers <span className="text-[10px] font-normal">(Comma separated for bulk stock)</span></label>
-                      <textarea rows={2} value={form.imei} onChange={(e) => setForm({ ...form, imei: e.target.value })} className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-4 text-sm resize-none" placeholder="Enter IMEI numbers..." />
+                    <div className="md:col-span-2 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <label className="block text-xs font-bold text-gray-500 uppercase">
+                          IMEI Numbers * <span className="text-[10px] font-normal">(Comma / Line separated)</span>
+                        </label>
+                        {form.imei && (
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] bg-indigo-50 text-primary-blue font-bold px-2 py-0.5 rounded-full border border-indigo-100">
+                              {form.imei.split(/[\n,;\s]+/).map(s => s.trim()).filter(Boolean).length} IMEIs
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const list = form.imei.split(/[\n,;\s]+/).map(s => s.trim()).filter(Boolean);
+                                setForm(prev => ({ ...prev, imei: list.join('\n') }));
+                                toast.info('Formatted 1 IMEI per line');
+                              }}
+                              className="text-[10px] text-primary-blue font-bold hover:underline flex items-center gap-1 bg-white border border-indigo-100 px-2 py-0.5 rounded-lg shadow-2xs"
+                            >
+                              <List size={10} /> Format 1/Line
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                      <textarea 
+                        required
+                        rows={3} 
+                        value={form.imei} 
+                        onChange={handleImeiChange} 
+                        className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-4 text-xs font-mono resize-y focus:bg-white focus:ring-2 focus:ring-primary-blue transition-all leading-relaxed" 
+                        placeholder="Enter or paste IMEI numbers (e.g. 355190873972319, 355190873971436 or 1 per line)..." 
+                      />
+
+                      {/* Live Badge Preview list */}
+                      {(() => {
+                        const parsed = form.imei ? form.imei.split(/[\n,;\s]+/).map(s => s.trim()).filter(Boolean) : [];
+                        if (parsed.length === 0) return null;
+                        return (
+                          <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-3 space-y-2">
+                            <div className="flex items-center justify-between text-[11px] font-bold text-slate-600">
+                              <span className="flex items-center gap-1.5">
+                                <Hash size={12} className="text-primary-blue" /> Live IMEI Badges ({parsed.length})
+                              </span>
+                              <span className="text-[10px] text-slate-400 font-normal">Click × to remove an IMEI</span>
+                            </div>
+                            <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto p-1">
+                              {parsed.map((num, idx) => (
+                                <span
+                                  key={idx}
+                                  className="bg-white border border-slate-200 text-slate-800 font-mono text-[11px] font-medium px-2 py-0.5 rounded-lg shadow-2xs flex items-center gap-1.5 hover:border-primary-blue/50 transition-all"
+                                >
+                                  <span className="bg-indigo-50 text-primary-blue text-[9px] font-bold px-1 rounded">{idx + 1}</span>
+                                  <span>{num}</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const updated = parsed.filter((_, i) => i !== idx);
+                                      const val = updated.join(', ');
+                                      setForm(prev => ({
+                                        ...prev,
+                                        imei: val,
+                                        stock: updated.length
+                                      }));
+                                    }}
+                                    className="text-gray-400 hover:text-red-500 font-bold text-[12px] leading-none ml-0.5 transition-colors"
+                                    title="Remove this IMEI"
+                                  >
+                                    ×
+                                  </button>
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </div>
                     <div className="md:col-span-2">
                       <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5">Warranty Details</label>
@@ -686,29 +834,22 @@ const AdminPhones = () => {
                     </div>
                     <div>
                       <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5">Stock Quantity *</label>
-                      <input type="number" required value={form.stock} onChange={(e) => setForm({ ...form, stock: e.target.value })} className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-4 text-sm" placeholder="0" />
+                      <input type="number" required value={form.stock} onChange={(e) => setForm({ ...form, stock: e.target.value })} className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-4 text-sm font-bold text-slate-800" placeholder="0" />
                     </div>
                     <div>
                       <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5">Supplier</label>
-                      <input 
-                        list="supplier-suggestions"
-                        placeholder="Search or select supplier"
-                        value={form.supplierId === 'none' ? 'None' : (suppliers.find(s => s._id === form.supplierId)?.name || form.supplierId || '')}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          if (val.toLowerCase() === 'none' || val === '') {
-                            setForm({ ...form, supplierId: 'none' });
-                          } else {
-                            const existing = suppliers.find(s => s.name.toLowerCase() === val.toLowerCase());
-                            setForm({ ...form, supplierId: existing ? existing._id : val });
-                          }
-                        }}
-                        className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-4 text-sm" 
-                      />
-                      <datalist id="supplier-suggestions">
-                        <option value="None" />
-                        {suppliers.map((s) => <option key={s._id} value={s.name}>{s.company}</option>)}
-                      </datalist>
+                      <select 
+                        value={form.supplierId || ''}
+                        onChange={(e) => setForm({ ...form, supplierId: e.target.value })}
+                        className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-4 text-sm font-medium focus:bg-white focus:ring-2 focus:ring-primary-blue outline-none transition-all cursor-pointer"
+                      >
+                        <option value="">None (No Supplier)</option>
+                        {suppliers.map((s) => (
+                          <option key={s._id} value={s._id}>
+                            {s.name} {s.company ? `(${s.company})` : ''}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                   </div>
                 </div>

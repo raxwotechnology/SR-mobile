@@ -23,8 +23,16 @@ const getFinancialDashboard = async (req, res, next) => {
 
     // Date filtering
     const dateFilter = {};
-    if (startDate) dateFilter.$gte = new Date(startDate);
-    if (endDate) dateFilter.$lte = new Date(endDate);
+    if (startDate) {
+      const sDate = new Date(startDate);
+      sDate.setHours(0, 0, 0, 0);
+      dateFilter.$gte = sDate;
+    }
+    if (endDate) {
+      const eDate = new Date(endDate);
+      eDate.setHours(23, 59, 59, 999);
+      dateFilter.$lte = eDate;
+    }
     if (Object.keys(dateFilter).length > 0) {
       storeFilter.date = dateFilter;
     }
@@ -33,6 +41,7 @@ const getFinancialDashboard = async (req, res, next) => {
 
     // Orders for Revenue
     const orderFilter = { ...storeFilter, orderStatus: { $nin: ['cancelled'] } };
+    delete orderFilter.date; // Remove transaction-specific 'date' field
     if (Object.keys(dateFilter).length > 0) orderFilter.createdAt = dateFilter;
     const orders = await Order.find(orderFilter);
 
@@ -43,7 +52,10 @@ const getFinancialDashboard = async (req, res, next) => {
     const orderCount = orders.length;
     const totalItemsSold = orders.reduce((sum, o) => sum + (o.items || []).reduce((x, it) => x + (it.quantity || 0), 0), 0);
 
-    const manualIncome = transactions.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
+    // Exclude automatic sales transactions from manualIncome to avoid double-counting
+    const manualIncome = transactions
+      .filter(t => t.type === 'income' && !['Sales', 'Sales (Partial Credit)'].includes(t.category))
+      .reduce((sum, t) => sum + t.amount, 0);
     const totalExpense = transactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
     
     const totalIncome = orderRevenue + manualIncome;
@@ -114,7 +126,11 @@ const getFinancialDashboard = async (req, res, next) => {
     for (const t of transactions) {
       const key = makeKey(new Date(t.date));
       const cur = seriesMap.get(key) || { key, label: formatLabel(key), income: 0, expense: 0, profit: 0, revenue: 0 };
-      if (t.type === 'income') cur.income += t.amount;
+      if (t.type === 'income') {
+        if (!['Sales', 'Sales (Partial Credit)'].includes(t.category)) {
+          cur.income += t.amount;
+        }
+      }
       if (t.type === 'expense') cur.expense += t.amount;
       seriesMap.set(key, cur);
     }
@@ -582,8 +598,16 @@ const getProfitReport = async (req, res, next) => {
 
     if (startDate || endDate) {
       filter.createdAt = {};
-      if (startDate) filter.createdAt.$gte = new Date(startDate);
-      if (endDate) filter.createdAt.$lte = new Date(endDate);
+      if (startDate) {
+        const sDate = new Date(startDate);
+        sDate.setHours(0, 0, 0, 0);
+        filter.createdAt.$gte = sDate;
+      }
+      if (endDate) {
+        const eDate = new Date(endDate);
+        eDate.setHours(23, 59, 59, 999);
+        filter.createdAt.$lte = eDate;
+      }
     }
 
     const orders = await Order.find(filter)
@@ -682,6 +706,269 @@ const getProfitReport = async (req, res, next) => {
   }
 };
 
+// @desc    Get Balance Report (Daily, Monthly, Yearly) matching legacy desktop format
+// @route   GET /api/finance/balance-report
+// @access  Private
+const getBalanceReport = async (req, res, next) => {
+  try {
+    const { date, period = 'monthly', storeId } = req.query;
+
+    const baseDate = date ? new Date(date) : new Date();
+    let startDate = new Date(baseDate);
+    let endDate = new Date(baseDate);
+
+    if (period === 'daily') {
+      startDate.setHours(0, 0, 0, 0);
+      endDate.setHours(23, 59, 59, 999);
+    } else if (period === 'yearly') {
+      startDate = new Date(baseDate.getFullYear(), 0, 1, 0, 0, 0, 0);
+      endDate = new Date(baseDate.getFullYear(), 11, 31, 23, 59, 59, 999);
+    } else {
+      // Monthly default
+      startDate = new Date(baseDate.getFullYear(), baseDate.getMonth(), 1, 0, 0, 0, 0);
+      endDate = new Date(baseDate.getFullYear(), baseDate.getMonth() + 1, 0, 23, 59, 59, 999);
+    }
+
+    const dateFilter = { $gte: startDate, $lte: endDate };
+
+    // Scoping for manager or requested storeId
+    let storeFilter = {};
+    if (req.user && req.user.role === 'manager') {
+      const store = await Store.findOne({ managerId: req.user._id });
+      if (store) storeFilter = { storeId: store._id };
+    } else if (storeId && storeId !== 'all') {
+      storeFilter = { storeId };
+    }
+
+    // Models
+    const Product = require('../models/Product');
+    const RepairJob = require('../models/RepairJob');
+    const Reload = require('../models/Reload');
+    const SupplierPayment = require('../models/SupplierPayment');
+    const Expense = require('../models/Expense');
+
+    // 1. Fetch Orders
+    const orderFilter = { ...storeFilter, createdAt: dateFilter, orderStatus: { $nin: ['cancelled'] } };
+    const orders = await Order.find(orderFilter).populate('userId', 'name phone isWholesale customerType').lean();
+
+    // 2. Classify products for Mobile vs Accessories vs Phone Cards/SIM Cards
+    const productIds = [];
+    orders.forEach(o => {
+      (o.items || []).forEach(it => {
+        if (it.productId) productIds.push(it.productId);
+      });
+    });
+    const products = await Product.find({ _id: { $in: productIds } }).populate('categoryId').lean();
+    const productMap = new Map();
+    products.forEach(p => {
+      productMap.set(p._id.toString(), p);
+    });
+
+    let mobileIncome = 0;
+    let accessoriesIncome = 0;
+    let wholesaleIncome = 0;
+    let advanceIncome = 0;
+    let phoneCardIncome = 0;
+    let simCardIncome = 0;
+
+    const normalCustomerItems = [];
+    const wholesaleCustomerItems = [];
+    const accessoriesItems = [];
+
+    orders.forEach(o => {
+      const receiptNo = o.invoiceNumber || o._id.toString().slice(-8).toUpperCase();
+      const oDate = new Date(o.createdAt);
+      const formattedDate = oDate.toISOString().split('T')[0].replace(/-/g, '/');
+      const formattedTime = oDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      const isWholesaleCust = o.isWholesale || o.userId?.isWholesale || o.userId?.customerType === 'wholesale';
+      const custId = o.userId?.phone || o.userId?.name || (o.userId ? o.userId._id.toString().slice(-6) : 'GUEST');
+
+      let orderTotal = o.totalAmount || 0;
+
+      if (isWholesaleCust) {
+        wholesaleIncome += orderTotal;
+      }
+
+      if (o.paymentMethod === 'Advance' || o.isAdvancePayment || o.advanceAmount) {
+        advanceIncome += o.advanceAmount || orderTotal;
+      }
+
+      (o.items || []).forEach(it => {
+        const prod = productMap.get(it.productId ? it.productId.toString() : '');
+        const catName = (prod?.categoryId?.name || it.category || '').toLowerCase();
+        const prodName = it.name || prod?.name || 'Item';
+        const brand = prod?.brand || 'Generic';
+        const model = prod?.model || prod?.category || 'Standard';
+        const qty = it.quantity || 1;
+        const price = it.price || 0;
+        const subTotal = qty * price;
+        const discount = it.discount || 0;
+        const total = subTotal - discount;
+
+        const isMobile = /mobile|phone|tablet|smartphone/i.test(catName) || prod?.ram || prod?.storage || (prod?.imei && prod.imei.length > 0);
+        const isSimOrCard = /sim|phone card|reload card/i.test(catName) || /sim|card/i.test(prodName.toLowerCase());
+
+        if (isSimOrCard) {
+          if (/sim/i.test(catName) || /sim/i.test(prodName.toLowerCase())) {
+            simCardIncome += total;
+          } else {
+            phoneCardIncome += total;
+          }
+        } else if (isMobile) {
+          if (!isWholesaleCust) mobileIncome += total;
+        } else {
+          if (!isWholesaleCust) accessoriesIncome += total;
+        }
+
+        const tableItem = {
+          id: `${o._id}-${it.productId || Math.random()}`,
+          receipt: receiptNo,
+          date: formattedDate,
+          time: formattedTime,
+          item: prodName,
+          brand,
+          model,
+          qty,
+          price,
+          subTotal,
+          discount,
+          total,
+          cId: custId,
+        };
+
+        if (isWholesaleCust) {
+          wholesaleCustomerItems.push(tableItem);
+        } else {
+          normalCustomerItems.push(tableItem);
+        }
+
+        if (!isMobile && !isSimOrCard) {
+          accessoriesItems.push(tableItem);
+        }
+      });
+    });
+
+    // 3. Fetch Repairs
+    let repairNormalIncome = 0;
+    let repairCompanyIncome = 0;
+
+    try {
+      const repairFilter = { ...storeFilter, createdAt: dateFilter };
+      const repairs = await RepairJob.find(repairFilter).lean();
+      repairs.forEach(r => {
+        const cost = r.estimatedCost || r.finalCost || 0;
+        if (r.isCompanyRepair || r.clientType === 'company') {
+          repairCompanyIncome += cost;
+        } else {
+          repairNormalIncome += cost;
+        }
+      });
+    } catch (err) {
+      console.error('Repair fetch in balance report:', err.message);
+    }
+
+    // 4. Fetch Reloads
+    let reloadIncome = 0;
+    try {
+      const reloadFilter = { ...storeFilter, createdAt: dateFilter };
+      const reloads = await Reload.find(reloadFilter).lean();
+      reloadIncome = reloads.reduce((sum, r) => sum + (r.amount || 0), 0);
+    } catch (err) {
+      console.error('Reload fetch in balance report:', err.message);
+    }
+
+    // 5. Fetch Costs & Expenses
+    let supplierCost = 0;
+    let serviceCost = 0;
+
+    try {
+      const supPayFilter = { ...storeFilter, date: dateFilter };
+      const supplierPayments = await SupplierPayment.find(supPayFilter).lean();
+      supplierCost = supplierPayments.reduce((sum, sp) => sum + (sp.amount || 0), 0);
+    } catch (err) {
+      console.error('Supplier payments fetch:', err.message);
+    }
+
+    try {
+      const expenseFilter = { ...storeFilter, date: dateFilter };
+      const expenses = await Expense.find(expenseFilter).lean();
+      expenses.forEach(e => {
+        if (/service|repair cost|maintenance/i.test(e.category || '')) {
+          serviceCost += e.amount || 0;
+        } else if (/supplier/i.test(e.category || '')) {
+          supplierCost += e.amount || 0;
+        }
+      });
+    } catch (err) {
+      console.error('Expense fetch:', err.message);
+    }
+
+    // Also check manual Income/Expense Transactions
+    let extraIncome = 0;
+    let extraCost = 0;
+    const txFilter = { ...storeFilter, date: dateFilter };
+    const transactions = await Transaction.find(txFilter).lean();
+    transactions.forEach(t => {
+      if (t.type === 'income' && !['Sales', 'Sales (Partial Credit)'].includes(t.category)) {
+        extraIncome += t.amount || 0;
+      } else if (t.type === 'expense') {
+        if (/service/i.test(t.category)) serviceCost += t.amount || 0;
+        else if (/supplier/i.test(t.category)) supplierCost += t.amount || 0;
+        else extraCost += t.amount || 0;
+      }
+    });
+
+    const totalIncome =
+      mobileIncome +
+      accessoriesIncome +
+      wholesaleIncome +
+      advanceIncome +
+      repairNormalIncome +
+      repairCompanyIncome +
+      phoneCardIncome +
+      simCardIncome +
+      reloadIncome +
+      extraIncome;
+
+    const totalCost = serviceCost + supplierCost + extraCost;
+    const balanceAmount = totalIncome - totalCost;
+
+    // Chart series data (for period bar visual)
+    const chartData = [
+      { name: baseDate.toISOString().split('T')[0].replace(/-/g, '/'), Income: totalIncome, Cost: totalCost, Balance: balanceAmount }
+    ];
+
+    res.json({
+      period,
+      selectedDate: baseDate.toISOString().split('T')[0],
+      balanceReport: {
+        mobileIncome,
+        accessoriesIncome,
+        wholesaleIncome,
+        advanceIncome,
+        repairNormalIncome,
+        repairCompanyIncome,
+        phoneCardIncome,
+        simCardIncome,
+        reloadIncome,
+        serviceCost,
+        supplierCost,
+        totalIncome,
+        totalCost,
+        balanceAmount,
+      },
+      chartData,
+      tables: {
+        normalCustomerDetails: normalCustomerItems,
+        wholesaleCustomerDetails: wholesaleCustomerItems,
+        accessoriesPayment: accessoriesItems,
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   getFinancialDashboard,
   createTransaction,
@@ -695,5 +982,7 @@ module.exports = {
   getTaxPayments,
   createTaxPayment,
   getProfitReport,
+  getBalanceReport,
 };
+
 

@@ -14,6 +14,7 @@ const hirePurchaseSchema = mongoose.Schema(
   {
     storeId: { type: mongoose.Schema.Types.ObjectId, ref: 'Store', required: true },
     orderId: { type: mongoose.Schema.Types.ObjectId, ref: 'Order' }, // Linked order
+    invoiceNumber: { type: String },
     
     customer: {
       name: { type: String, required: true },

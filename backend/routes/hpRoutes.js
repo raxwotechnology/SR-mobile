@@ -4,6 +4,7 @@ const { protect, authorize } = require('../middleware/authMiddleware');
 const {
   getHPRecords,
   getHPById,
+  updateHPRecord,
   recordHPPayment,
   getCustomerHistory,
   getAllCustomers,
@@ -20,7 +21,9 @@ router.get('/customer/:phone/history', getCustomerHistory);
 
 router.route('/:id')
   .get(getHPById)
+  .put(updateHPRecord)
   .delete(authorize('admin'), deleteHPRecord);
+
 
 router.post('/:id/payments', recordHPPayment);
 

@@ -151,14 +151,15 @@ const endSession = async (req, res, next) => {
 const getPosProducts = async (req, res, next) => {
   try {
     const storeId = await resolveStoreId(req.user);
-    if (!storeId) {
-      res.status(400);
-      return next(new Error('No store found for your account'));
-    }
 
     const { search, category } = req.query;
+
+    const storeMatch = storeId
+      ? { $or: [{ storeId }, { storeId: null }, { storeId: { $exists: false } }] }
+      : {};
+
     const filter = {
-      storeId,
+      ...storeMatch,
       status: 'active',
     };
 
@@ -168,19 +169,23 @@ const getPosProducts = async (req, res, next) => {
 
     let products;
     if (search) {
-      filter.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { barcode: search },
-        { sku: { $regex: search, $options: 'i' } },
+      filter.$and = [
+        {
+          $or: [
+            { name: { $regex: search, $options: 'i' } },
+            { barcode: search },
+            { sku: { $regex: search, $options: 'i' } },
+          ],
+        },
       ];
       products = await Product.find(filter)
-        .select('name price mrp minPrice stock images unit barcode sku variants discount allowKokoPos imei categoryId')
+        .select('name price mrp minPrice stock images unit barcode sku variants discount allowKokoPos imei categoryId storeId')
         .populate('categoryId', 'name')
         .limit(50)
         .lean();
     } else {
       products = await Product.find(filter)
-        .select('name price mrp minPrice stock images unit barcode sku variants discount allowKokoPos imei categoryId')
+        .select('name price mrp minPrice stock images unit barcode sku variants discount allowKokoPos imei categoryId storeId')
         .populate('categoryId', 'name')
         .limit(100)
         .lean();
@@ -198,17 +203,17 @@ const getPosProducts = async (req, res, next) => {
 const getProductByBarcode = async (req, res, next) => {
   try {
     const storeId = await resolveStoreId(req.user);
-    if (!storeId) {
-      res.status(400);
-      return next(new Error('No store found for your account'));
-    }
+
+    const storeMatch = storeId
+      ? { $or: [{ storeId }, { storeId: null }, { storeId: { $exists: false } }] }
+      : {};
 
     const product = await Product.findOne({
       barcode: req.params.code,
-      storeId,
+      ...storeMatch,
       status: 'active',
     })
-      .select('name price mrp minPrice stock images unit barcode sku variants discount allowKokoPos imei categoryId')
+      .select('name price mrp minPrice stock images unit barcode sku variants discount allowKokoPos imei categoryId storeId')
       .populate('categoryId', 'name')
       .lean();
 
@@ -726,6 +731,7 @@ const posCheckout = async (req, res, next) => {
       await HirePurchase.create({
         storeId,
         orderId: order._id,
+        invoiceNumber: invoiceNumber,
         customer: hirePurchaseData.customer,
         totalAmount: totalAmount,
         interestRate: hirePurchaseData.interestRate || 0,
@@ -734,7 +740,7 @@ const posCheckout = async (req, res, next) => {
         downPayment: hirePurchaseData.downPayment || 0,
         balanceAmount: (hirePurchaseData.netTotal || totalAmount) - (hirePurchaseData.downPayment || 0),
         installmentType: hirePurchaseData.installmentType || 'Monthly',
-        numberOfInstallments: hirePurchaseData.numberOfInstallments || 1,
+        numberOfInstallments: hirePurchaseData.numberOfInstallments !== undefined ? hirePurchaseData.numberOfInstallments : 1,
         installmentAmount: hirePurchaseData.installmentAmount || 0,
         totalPaid: hirePurchaseData.downPayment || 0,
         startDate: hpStartDate,

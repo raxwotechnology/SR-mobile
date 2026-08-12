@@ -8,7 +8,7 @@ const getAccounts = async (req, res, next) => {
   try {
     const { storeId } = req.query;
     const filter = {};
-    if (storeId) filter.storeId = storeId;
+    if (storeId && storeId !== 'all') filter.storeId = storeId;
     
     const accounts = await Account.find(filter).sort({ name: 1 });
     if (req.user && req.user.role === 'cashier') {
