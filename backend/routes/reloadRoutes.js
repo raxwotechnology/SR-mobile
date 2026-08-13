@@ -22,9 +22,6 @@ router.route('/')
   .get(getReloads)
   .post(createReload);
 
-router.route('/:id')
-  .delete(deleteReload);
-
 router.route('/card-stock')
   .get(getCardStock)
   .post(addOrUpdateCardStock);
@@ -42,5 +39,8 @@ router.route('/reload-stock/:id')
 
 router.route('/daily-sales')
   .post(recordDailyCardSales);
+
+router.route('/:id')
+  .delete(deleteReload);
 
 module.exports = router;
