@@ -20,88 +20,35 @@ const getHPRecords = async (req, res, next) => {
 
     if (status) filter.status = status;
     if (search) {
-      // Check if there is an exact match or suffix match for invoice number (case-insensitive) in HirePurchase or Order
-      const isNumOnly = /^\d+$/.test(search);
-      let hasExactInvoice = null;
-      let exactOrderIds = [];
+      const searchTrimmed = search.trim();
+      const searchNum = Number(searchTrimmed);
+      const isNum = !isNaN(searchNum) && searchTrimmed !== '';
 
-      if (isNumOnly) {
-        const searchNum = Number(search);
-        hasExactInvoice = await HirePurchase.findOne({
-          $or: [
-            { invoiceNumber: { $regex: `^${search}$`, $options: 'i' } },
-            { invoiceNumber: { $regex: `-[0]*${searchNum}$` } }
-          ]
-        });
+      const matchingOrders = await Order.find({
+        invoiceNumber: { $regex: searchTrimmed, $options: 'i' }
+      }).select('_id');
+      const matchingOrderIds = matchingOrders.map(o => o._id);
 
-        if (!hasExactInvoice) {
-          const matchingExactOrders = await Order.find({
-            $or: [
-              { invoiceNumber: { $regex: `^${search}$`, $options: 'i' } },
-              { invoiceNumber: { $regex: `-[0]*${searchNum}$` } }
-            ]
-          }).select('_id');
-          exactOrderIds = matchingExactOrders.map(o => o._id);
-        }
-      } else {
-        hasExactInvoice = await HirePurchase.findOne({
-          invoiceNumber: { $regex: `^${search}$`, $options: 'i' }
-        });
-        if (!hasExactInvoice) {
-          const matchingExactOrders = await Order.find({
-            invoiceNumber: { $regex: `^${search}$`, $options: 'i' }
-          }).select('_id');
-          exactOrderIds = matchingExactOrders.map(o => o._id);
-        }
-      }
+      const cleanPhone = searchTrimmed.replace(/[\s\-()+]/g, '');
+      const basePhone = cleanPhone.replace(/^94/, '').replace(/^0/, '');
+      const cleanNIC = searchTrimmed.replace(/[\s\-]/g, '');
 
-      if (hasExactInvoice || exactOrderIds.length > 0) {
-        const searchNum = Number(search);
-        const isNum = !isNaN(searchNum);
-        
-        filter.$or = [
-          { 'invoiceNumber': { $regex: `^${search}$`, $options: 'i' } },
-          ...(isNum ? [
-            { 'invoiceNumber': searchNum },
-            { 'invoiceNumber': { $regex: `-[0]*${searchNum}$` } }
-          ] : []),
-          ...(exactOrderIds.length > 0 ? [{ orderId: { $in: exactOrderIds } }] : [])
-        ];
-      } else {
-        const matchingOrders = await Order.find({ invoiceNumber: { $regex: search, $options: 'i' } }).select('_id');
-        const matchingOrderIds = matchingOrders.map(o => o._id);
-
-        const searchNum = Number(search);
-        const isNum = !isNaN(searchNum);
-
-        // Normalize phone number formats for search (Sri Lanka formats)
-        const cleanPhone = search.replace(/[\s\-()+]/g, '');
-        const basePhone = cleanPhone.replace(/^94/, '').replace(/^0/, '');
-
-        // Normalize NIC formats (remove dashes/spaces)
-        const cleanNIC = search.replace(/[\s\-]/g, '');
-
-        filter.$or = [
-          { 'customer.name': { $regex: search, $options: 'i' } },
-          { 'customer.phone': { $regex: search, $options: 'i' } },
-          { 'customer.nic': { $regex: search, $options: 'i' } },
-          
-          // Cleaned phone/NIC search to handle prefix/spacing differences
-          ...(basePhone ? [{ 'customer.phone': { $regex: basePhone, $options: 'i' } }] : []),
-          ...(cleanNIC ? [{ 'customer.nic': { $regex: cleanNIC, $options: 'i' } }] : []),
-
-          // Guarantor search
-          { 'customer.guarantors.name': { $regex: search, $options: 'i' } },
-          { 'customer.guarantors.phone': { $regex: search, $options: 'i' } },
-          { 'customer.guarantors.nic': { $regex: search, $options: 'i' } },
-
-          // Invoice Number (regex search for string, exact for legacy number fields)
-          { 'invoiceNumber': { $regex: search, $options: 'i' } },
-          ...(isNum ? [{ 'invoiceNumber': searchNum }] : []),
-
-          { orderId: { $in: matchingOrderIds } }
-        ];
-      }
+      filter.$or = [
+        { 'customer.name': { $regex: searchTrimmed, $options: 'i' } },
+        { 'customer.phone': { $regex: searchTrimmed, $options: 'i' } },
+        { 'customer.nic': { $regex: searchTrimmed, $options: 'i' } },
+        ...(basePhone ? [{ 'customer.phone': { $regex: basePhone, $options: 'i' } }] : []),
+        ...(cleanNIC ? [{ 'customer.nic': { $regex: cleanNIC, $options: 'i' } }] : []),
+        { 'customer.guarantors.name': { $regex: searchTrimmed, $options: 'i' } },
+        { 'customer.guarantors.phone': { $regex: searchTrimmed, $options: 'i' } },
+        { 'customer.guarantors.nic': { $regex: searchTrimmed, $options: 'i' } },
+        { 'invoiceNumber': { $regex: searchTrimmed, $options: 'i' } },
+        ...(isNum ? [
+          { 'invoiceNumber': searchNum },
+          { 'invoiceNumber': { $regex: `-[0]*${searchNum}$` } }
+        ] : []),
+        { orderId: { $in: matchingOrderIds } }
+      ];
     }
 
     if (year && year !== 'all') {
