@@ -29,26 +29,99 @@ const getHPRecords = async (req, res, next) => {
       }).select('_id');
       const matchingOrderIds = matchingOrders.map(o => o._id);
 
+      // Suffix pattern match for sequence numbers (e.g. "1" matches ending in "-0001" or "-1")
+      const suffixPatterns = isNum ? [
+        { invoiceNumber: { $regex: `-[0]*${searchNum}$` } }
+      ] : [];
+
       const cleanPhone = searchTrimmed.replace(/[\s\-()+]/g, '');
       const basePhone = cleanPhone.replace(/^94/, '').replace(/^0/, '');
       const cleanNIC = searchTrimmed.replace(/[\s\-]/g, '');
 
-      filter.$or = [
-        { 'customer.name': { $regex: searchTrimmed, $options: 'i' } },
-        { 'customer.phone': { $regex: searchTrimmed, $options: 'i' } },
-        { 'customer.nic': { $regex: searchTrimmed, $options: 'i' } },
-        ...(basePhone ? [{ 'customer.phone': { $regex: basePhone, $options: 'i' } }] : []),
-        ...(cleanNIC ? [{ 'customer.nic': { $regex: cleanNIC, $options: 'i' } }] : []),
-        { 'customer.guarantors.name': { $regex: searchTrimmed, $options: 'i' } },
-        { 'customer.guarantors.phone': { $regex: searchTrimmed, $options: 'i' } },
-        { 'customer.guarantors.nic': { $regex: searchTrimmed, $options: 'i' } },
-        { 'invoiceNumber': { $regex: searchTrimmed, $options: 'i' } },
-        ...(isNum ? [
-          { 'invoiceNumber': searchNum },
-          { 'invoiceNumber': { $regex: `-[0]*${searchNum}$` } }
-        ] : []),
-        { orderId: { $in: matchingOrderIds } }
-      ];
+      // Check if there is an exact or suffix match for invoice number in the database
+      // to prioritize it and show ONLY that matching record
+      const hasExactInvoice = await HirePurchase.findOne({
+        $or: [
+          { invoiceNumber: { $regex: `^${searchTrimmed}$`, $options: 'i' } },
+          ...suffixPatterns
+        ]
+      });
+
+      let exactOrderIds = [];
+      if (!hasExactInvoice && isNum) {
+        const matchingExactOrders = await Order.find({
+          $or: [
+            { invoiceNumber: { $regex: `^${searchTrimmed}$`, $options: 'i' } },
+            { invoiceNumber: { $regex: `-[0]*${searchNum}$` } }
+          ]
+        }).select('_id');
+        exactOrderIds = matchingExactOrders.map(o => o._id);
+      }
+
+      if (hasExactInvoice || exactOrderIds.length > 0) {
+        // If we have an exact or suffix match on the effective invoice number, return ONLY that record.
+        // Effective invoice means: if HP has invoiceNumber, match on HP. Otherwise, match on linked order.
+        filter.$or = [
+          // 1. If HP has invoiceNumber, it must match
+          {
+            $and: [
+              { invoiceNumber: { $exists: true, $ne: null, $ne: "" } },
+              {
+                $or: [
+                  { invoiceNumber: { $regex: `^${searchTrimmed}$`, $options: 'i' } },
+                  ...suffixPatterns
+                ]
+              }
+            ]
+          },
+          // 2. If HP does not have invoiceNumber, match on orderId
+          {
+            $and: [
+              {
+                $or: [
+                  { invoiceNumber: { $exists: false } },
+                  { invoiceNumber: null },
+                  { invoiceNumber: "" }
+                ]
+              },
+              ...(exactOrderIds.length > 0 ? [{ orderId: { $in: exactOrderIds } }] : [{ _id: hasExactInvoice ? hasExactInvoice._id : null }])
+            ]
+          }
+        ];
+      } else {
+        // Fallback to broad search (names, phones, NICs, and guarantors)
+        filter.$or = [
+          { 'customer.name': { $regex: searchTrimmed, $options: 'i' } },
+          { 'customer.phone': { $regex: searchTrimmed, $options: 'i' } },
+          { 'customer.nic': { $regex: searchTrimmed, $options: 'i' } },
+          ...(basePhone ? [{ 'customer.phone': { $regex: basePhone, $options: 'i' } }] : []),
+          ...(cleanNIC ? [{ 'customer.nic': { $regex: cleanNIC, $options: 'i' } }] : []),
+          { 'customer.guarantors.name': { $regex: searchTrimmed, $options: 'i' } },
+          { 'customer.guarantors.phone': { $regex: searchTrimmed, $options: 'i' } },
+          { 'customer.guarantors.nic': { $regex: searchTrimmed, $options: 'i' } },
+          
+          // Match invoiceNumber directly on HP
+          { 'invoiceNumber': { $regex: searchTrimmed, $options: 'i' } },
+          ...(isNum ? [
+            { 'invoiceNumber': searchNum },
+            { 'invoiceNumber': { $regex: `-[0]*${searchNum}$` } }
+          ] : []),
+
+          // Match invoiceNumber on linked order only if HP has no invoiceNumber set
+          {
+            $and: [
+              {
+                $or: [
+                  { invoiceNumber: { $exists: false } },
+                  { invoiceNumber: null },
+                  { invoiceNumber: "" }
+                ]
+              },
+              { orderId: { $in: matchingOrderIds } }
+            ]
+          }
+        ];
+      }
     }
 
     if (year && year !== 'all') {
