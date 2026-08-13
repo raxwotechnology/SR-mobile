@@ -298,22 +298,52 @@ const POSScreen = () => {
     }, 300);
   };
 
-  // Handle search enter (add first result)
+  // Handle search enter (add first result if searching, or trigger checkout if empty search & cart has items)
   const handleSearchKeyDown = (e) => {
     if (e.key === 'Enter') {
       e.preventDefault();
-      if (products.length > 0) {
-        pos.addItem(products[0]);
-        toast.success(`Added ${products[0].name}`, { autoClose: 1000 });
-        setSearchQuery('');
-        loadProducts();
-      } else if (searchQuery.trim()) {
-        // No results, prompt quick add
-        setQuickAddForm({ ...quickAddForm, name: searchQuery });
-        setShowQuickAdd(true);
+      if (searchQuery.trim()) {
+        if (products.length > 0) {
+          pos.addItem(products[0]);
+          toast.success(`Added ${products[0].name}`, { autoClose: 1000 });
+          setSearchQuery('');
+          loadProducts();
+        } else {
+          // No results, prompt quick add
+          setQuickAddForm({ ...quickAddForm, name: searchQuery });
+          setShowQuickAdd(true);
+        }
+      } else if (pos.cart.length > 0 && !checkingOut) {
+        handleCheckout();
       }
     }
   };
+
+  // Global Keydown Listener for Enter key checkout
+  useEffect(() => {
+    const handleGlobalKeyDown = (e) => {
+      if (e.key === 'Enter') {
+        const activeElem = document.activeElement;
+        const isModalOpen = showScanner || showInvoice || showDiscount || showShiftSummary || showStartSession || showEndSession || showBalanceModal || showCreditPanel || showQuickAdd || showReloadModal || showCustomerHistory || showReturnModal || !isUnlocked || priceSafeguardWarning;
+
+        if (!isModalOpen && pos.cart.length > 0 && !checkingOut) {
+          const isSearchInput = activeElem?.classList?.contains('pos-search-input');
+
+          // If focused on search input and user typed a search term, let search handler process it
+          if (isSearchInput && searchQuery.trim()) {
+            return;
+          }
+
+          // In all other cases (payment inputs, split payment rows, amount tendered, body focus), Enter triggers checkout!
+          e.preventDefault();
+          handleCheckout();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, [pos.cart, checkingOut, showScanner, showInvoice, showDiscount, showShiftSummary, showStartSession, showEndSession, showBalanceModal, showCreditPanel, showQuickAdd, showReloadModal, showCustomerHistory, showReturnModal, isUnlocked, priceSafeguardWarning, searchQuery]);
 
   const handleQuickAdd = async () => {
     if (!quickAddForm.name || !quickAddForm.price) {
@@ -482,8 +512,8 @@ const POSScreen = () => {
     const code = unlockCode.trim();
     setUnlockError('');
 
-    // A. If already logged in, do a fast local check first
-    if (user) {
+    // A. If NO specific cashier profile is selected, check current logged-in user locally
+    if (!selectedCashier && user) {
       const isLocalMatched = 
         code === '1234' || 
         code.toLowerCase() === 'cashier123' ||
@@ -504,20 +534,19 @@ const POSScreen = () => {
       }
     }
 
-    // B. Online check / login check via posLogin API
+    // B. Online check / login check via posLogin API for selected cashier profile
     try {
       setUnlockError('Verifying passcode...');
       const payload = { code };
       if (selectedCashier?.email) {
         payload.email = selectedCashier.email;
-      } else if (user?.email) {
-        payload.email = user.email;
       }
 
       const { data } = await posLogin(payload);
       
-      // Save authenticated user to Zustand auth store
+      // Save authenticated user to Zustand auth store & switch active cashier
       login(data);
+      setSelectedCashier(null);
       setIsUnlocked(true);
       setUnlockCode('');
       setUnlockError('');
@@ -599,6 +628,13 @@ const POSScreen = () => {
       }
     }
 
+    // Auto-fill single payment method amount if 0 or empty
+    if (!isHP && payments.length === 1 && (!payments[0].amount || Number(payments[0].amount) === 0)) {
+      payments[0].amount = isCredit ? (parseFloat(creditAmountPaid) || 0) : grandTotal;
+    }
+
+    const currentTotalPaid = payments.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
+
     // Validate split payments allocation
     if (!isHP && payments.length > 0) {
       // Validate account selection for bank/cheque/card
@@ -611,10 +647,10 @@ const POSScreen = () => {
 
       if (!isCredit) {
         const cashRow = payments.find(p => p.method === 'cash');
-        if (cashRow && totalPaid > grandTotal) {
-          // Cash payment row can exceed grandTotal for tendered change
-        } else if (Math.abs(totalPaid - grandTotal) > 0.05) {
-          toast.error(`Total payment allocation (Rs. ${totalPaid.toFixed(2)}) must match Grand Total (Rs. ${grandTotal.toFixed(2)}).`);
+        if (cashRow && currentTotalPaid >= grandTotal) {
+          // Cash payment row can meet or exceed grandTotal for tendered change
+        } else if (Math.abs(currentTotalPaid - grandTotal) > 0.05) {
+          toast.error(`Total payment allocation (Rs. ${currentTotalPaid.toFixed(2)}) must match Grand Total (Rs. ${grandTotal.toFixed(2)}).`);
           return;
         }
       }
@@ -1341,7 +1377,8 @@ const POSScreen = () => {
             <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
               <input
                 type="text"
-                placeholder="Search Invoice Number (e.g. INV-20260605-0001)"
+                autoFocus
+                placeholder="Scan Receipt Barcode / Invoice No / IMEI / Phone..."
                 value={returnInvoiceNo}
                 onChange={e => setReturnInvoiceNo(e.target.value)}
                 className="pos-input"
@@ -1515,9 +1552,9 @@ const POSScreen = () => {
             <Smartphone size={18} />
             <span className="pos-topbar-btn-text">Reload</span>
           </button>
-          <button className="pos-topbar-btn" onClick={handleSwitchCashier} title="Switch Cashier" style={{ background: '#f5f3ff', color: '#5b21b6', borderColor: '#ddd6fe' }}>
+          <button className="pos-topbar-btn" onClick={handleSwitchCashier} title={`Switch Cashier (${user?.name || ''})`} style={{ background: '#f5f3ff', color: '#5b21b6', borderColor: '#ddd6fe' }}>
             <Lock size={18} />
-            <span className="pos-topbar-btn-text">Switch Cashier</span>
+            <span className="pos-topbar-btn-text">{user?.name || 'Switch Cashier'}</span>
           </button>
           <button className="pos-topbar-logout" onClick={handleLogout} title="Logout">
             <LogOut size={18} />
@@ -1598,7 +1635,8 @@ const POSScreen = () => {
                 <div
                   key={product._id}
                   className={`pos-product-card ${product.stock <= 0 ? 'pos-out-of-stock' : ''}`}
-                  onClick={() => product.stock > 0 && handleAddProduct(product)}
+                  onDoubleClick={() => product.stock > 0 && handleAddProduct(product)}
+                  title={product.stock > 0 ? "Double click to add item" : "Out of stock"}
                 >
                   <div className="pos-product-img-wrapper">
                     {(product.productLink || product.images?.[0]) ? (
@@ -1615,31 +1653,36 @@ const POSScreen = () => {
                       </div>
                     )}
                     {product.stock <= 5 && product.stock > 0 && (
-                      <span className="pos-stock-badge pos-stock-low">Low</span>
+                      <span className="pos-stock-badge pos-stock-low">LOW</span>
                     )}
                     {product.stock <= 0 && (
-                      <span className="pos-stock-badge pos-stock-out">Out</span>
+                      <span className="pos-stock-badge pos-stock-out">OUT</span>
                     )}
                   </div>
                   <div className="pos-product-info">
-                    <h4 className="pos-product-name">{product.name}</h4>
-                    <div className="pos-product-meta" style={{ display: 'flex', flexDirection: 'column', gap: '2px', width: '100%' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
-                        <span className="pos-product-price" style={{ fontSize: '13px', fontWeight: 'bold', color: '#1e293b' }}>Rs. {product.price.toFixed(2)}</span>
-                        <span className="pos-product-unit" style={{ fontSize: '11px', color: '#64748b', fontWeight: 'bold' }}>Stock: {product.stock}</span>
-                      </div>
-                      {product.minPrice > 0 && (
-                        <span style={{ fontSize: '10px', color: '#ef4444', fontWeight: 600 }}>
-                          Min: Rs. {product.minPrice.toFixed(2)}
-                        </span>
-                      )}
+                    <h4 className="pos-product-name" title={product.name}>{product.name}</h4>
+                    <div className="pos-product-meta">
+                      <span className="pos-product-price">Rs. {product.price.toFixed(2)}</span>
+                      <span className="pos-product-stock-pill">Stock: {product.stock}</span>
                     </div>
+                    {product.minPrice > 0 && (
+                      <span className="pos-product-min-badge">
+                        Min: Rs. {product.minPrice.toFixed(2)}
+                      </span>
+                    )}
                     {product.barcode && (
                       <span className="pos-product-barcode">{product.barcode}</span>
                     )}
                   </div>
                   {product.stock > 0 && (
-                    <button className="pos-product-add-btn">
+                    <button
+                      className="pos-product-add-btn"
+                      onDoubleClick={(e) => {
+                        e.stopPropagation();
+                        handleAddProduct(product);
+                      }}
+                      title="Double click to add"
+                    >
                       <Plus size={18} />
                     </button>
                   )}
@@ -2140,6 +2183,31 @@ const POSScreen = () => {
                     Card
                   </button>
                   <button
+                    className={`pos-payment-btn ${pos.paymentMethod === 'hire_purchase' ? 'active' : ''}`}
+                    onClick={() => {
+                      pos.setPaymentMethod('hire_purchase');
+                      if (!pos.hirePurchaseData) {
+                        pos.setHirePurchaseData({
+                          customer: { name: pos.customerName, phone: pos.customerPhone, nic: '', address: '', guarantors: [] },
+                          downPayment: 0,
+                          downPaymentMethod: 'cash',
+                          downPaymentAccountId: '',
+                          numberOfInstallments: 6,
+                          installmentType: 'Monthly',
+                          interestRate: 0,
+                          interestAmount: 0,
+                          netTotal: grandTotal,
+                          installmentAmount: grandTotal / 6,
+                          startDate: new Date().toISOString().split('T')[0]
+                        });
+                      }
+                    }}
+                    title="Hire Purchase (Installments)"
+                  >
+                    <Clock size={20} />
+                    Installment
+                  </button>
+                  <button
                     className={`pos-payment-btn ${pos.paymentMethod === 'koko' ? 'active' : ''}`}
                     onClick={() => pos.setPaymentMethod('koko')}
                     title="Koko Pay - Buy Now Pay Later"
@@ -2172,31 +2240,7 @@ const POSScreen = () => {
                     <CreditCard size={20} />
                     PayHere
                   </button>
-                  <button
-                    className={`pos-payment-btn ${pos.paymentMethod === 'hire_purchase' ? 'active' : ''}`}
-                    onClick={() => {
-                      pos.setPaymentMethod('hire_purchase');
-                      if (!pos.hirePurchaseData) {
-                        pos.setHirePurchaseData({
-                          customer: { name: pos.customerName, phone: pos.customerPhone, nic: '', address: '', guarantors: [] },
-                          downPayment: 0,
-                          downPaymentMethod: 'cash',
-                          downPaymentAccountId: '',
-                          numberOfInstallments: 6,
-                          installmentType: 'Monthly',
-                          interestRate: 0,
-                          interestAmount: 0,
-                          netTotal: grandTotal,
-                          installmentAmount: grandTotal / 6,
-                          startDate: new Date().toISOString().split('T')[0]
-                        });
-                      }
-                    }}
-                    title="Hire Purchase (Installments)"
-                  >
-                    <Clock size={20} />
-                    Installment
-                  </button>
+                  
                 </div>
 
 
@@ -2411,19 +2455,20 @@ const POSScreen = () => {
                       </div>
                       <div>
                         <label style={{ fontSize: '10px', fontWeight: 'bold', color: '#92400e' }}>Down Payment (Rs.) *</label>
-                        <input type="number" value={pos.hirePurchaseData?.downPayment || 0}
+                        <input type="number" 
+                          value={pos.hirePurchaseData?.downPayment === 0 || pos.hirePurchaseData?.downPayment === '0' ? '' : (pos.hirePurchaseData?.downPayment ?? '')}
                           onChange={(e) => {
-                            const dp = Number(e.target.value);
+                            const val = e.target.value;
+                            const dp = val === '' ? 0 : Number(val);
                             const interest = Number(pos.hirePurchaseData?.interestAmount || 0);
 
                             const netTotal = grandTotal + interest;
                             const bal = netTotal - dp;
                             pos.setHirePurchaseData({
                               ...pos.hirePurchaseData,
-                              downPayment: dp,
+                              downPayment: val === '' ? '' : dp,
                               netTotal: netTotal,
-                              installmentAmount: bal / (pos.hirePurchaseData?.numberOfInstallments || 1)
-
+                              installmentAmount: (pos.hirePurchaseData?.numberOfInstallments || 0) > 0 ? bal / pos.hirePurchaseData.numberOfInstallments : 0
                             });
                           }}
                           placeholder="0.00" className="pos-input" style={{ fontSize: '12px', background: '#fff', fontWeight: 'bold', color: '#1e293b' }} />
@@ -2474,17 +2519,19 @@ const POSScreen = () => {
                       )}
                       <div>
                         <label style={{ fontSize: '10px', fontWeight: 'bold', color: '#92400e' }}>Interest Amount (Rs.)</label>
-                        <input type="number" value={pos.hirePurchaseData.interestAmount || 0}
+                        <input type="number" 
+                          value={pos.hirePurchaseData?.interestAmount === 0 || pos.hirePurchaseData?.interestAmount === '0' ? '' : (pos.hirePurchaseData?.interestAmount ?? '')}
                           onChange={(e) => {
-                            const interest = Number(e.target.value);
-                            const dp = Number(pos.hirePurchaseData.downPayment || 0);
+                            const val = e.target.value;
+                            const interest = val === '' ? 0 : Number(val);
+                            const dp = Number(pos.hirePurchaseData?.downPayment || 0);
                             const netTotal = grandTotal + interest;
                             const bal = netTotal - dp;
                             pos.setHirePurchaseData({
                               ...pos.hirePurchaseData,
-                              interestAmount: interest,
+                              interestAmount: val === '' ? '' : interest,
                               netTotal: netTotal,
-                              installmentAmount: bal / (pos.hirePurchaseData.numberOfInstallments || 1)
+                              installmentAmount: (pos.hirePurchaseData?.numberOfInstallments || 0) > 0 ? bal / pos.hirePurchaseData.numberOfInstallments : 0
                             });
                           }}
                           placeholder="0.00" className="pos-input" style={{ fontSize: '12px', background: '#fff', fontWeight: 'bold', color: '#1e293b' }} />
@@ -2501,11 +2548,11 @@ const POSScreen = () => {
                             pos.setHirePurchaseData({
                               ...pos.hirePurchaseData,
                               numberOfInstallments: ni,
-                              installmentAmount: bal / ni
+                              installmentAmount: ni > 0 ? bal / ni : 0
                             });
                           }}
                           className="pos-input" style={{ fontSize: '12px', background: '#fff', color: '#1e293b' }}>
-                          {[3, 6, 9, 10, 12, 18, 24].map(n => <option key={n} value={n}>{n} Months</option>)}
+                          {[0, 3, 6, 9, 10, 12, 18, 24].map(n => <option key={n} value={n}>{n} Months</option>)}
                         </select>
                       </div>
                       <div style={{ gridColumn: 'span 2', display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '10px', padding: '10px', background: 'rgba(255,255,255,0.5)', borderRadius: '10px' }}>
@@ -2530,7 +2577,7 @@ const POSScreen = () => {
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid rgba(146, 64, 14, 0.3)', paddingTop: '4px' }}>
                           <span style={{ fontSize: '11px', fontWeight: 'bold', color: '#92400e' }}>Installment Amount:</span>
                           <span style={{ fontSize: '15px', fontWeight: '800', color: '#b45309' }}>
-                            Rs. {(((grandTotal + Number(pos.hirePurchaseData.interestAmount || 0)) - Number(pos.hirePurchaseData.downPayment || 0)) / (pos.hirePurchaseData.numberOfInstallments || 1)).toFixed(2)}
+                            Rs. {((pos.hirePurchaseData?.numberOfInstallments || 0) > 0 ? (((grandTotal + Number(pos.hirePurchaseData?.interestAmount || 0)) - Number(pos.hirePurchaseData?.downPayment || 0)) / pos.hirePurchaseData.numberOfInstallments) : 0).toFixed(2)}
                           </span>
                         </div>
                       </div>
@@ -2550,6 +2597,12 @@ const POSScreen = () => {
                         type="number"
                         value={pos.tenderedAmount}
                         onChange={(e) => pos.setTenderedAmount(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleCheckout();
+                          }
+                        }}
                         placeholder="0.00"
                         className="pos-cash-input"
                         min={grandTotal}
@@ -2776,9 +2829,11 @@ const POSScreen = () => {
                 onChange={(e) => setDiscountInput(e.target.value)}
                 placeholder={discountTypeInput === 'percentage' ? 'e.g. 10' : 'e.g. 5.00'}
                 className="pos-input pos-discount-input"
+                style={{ background: '#ffffff', color: '#0f172a', border: '2px solid #3b82f6', borderRadius: '12px', fontSize: '18px', fontWeight: 'bold' }}
                 autoFocus
                 min="0"
                 step="0.01"
+                onKeyDown={(e) => e.key === 'Enter' && handleApplyDiscount()}
               />
               <button className="pos-btn-green pos-btn-lg" onClick={handleApplyDiscount}>
                 Apply Discount

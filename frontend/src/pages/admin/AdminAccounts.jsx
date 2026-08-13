@@ -54,7 +54,7 @@ const AdminAccounts = () => {
 
   const openCreate = () => {
     setEditingId(null);
-    setForm({ ...emptyForm, storeId: selectedStoreId !== 'all' ? selectedStoreId : '' });
+    setForm({ ...emptyForm, storeId: selectedStoreId !== 'all' ? selectedStoreId : (stores[0]?._id || '') });
     setShowModal(true);
   };
 

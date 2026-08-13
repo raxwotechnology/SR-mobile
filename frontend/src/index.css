@@ -41,6 +41,18 @@ body {
   color: var(--color-dark-navy);
 }
 
+/* Disable native number input spinners (up/down stepper arrows) globally */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none !important;
+  margin: 0 !important;
+}
+
+input[type="number"] {
+  -moz-appearance: textfield !important;
+  appearance: textfield !important;
+}
+
 .base-container {
   @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
 }
@@ -539,10 +551,10 @@ body {
 .pos-product-grid {
   flex: 1;
   overflow-y: auto;
-  padding: 1rem 1.25rem;
+  padding: 1.15rem;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 0.85rem;
+  grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
+  gap: 1rem;
   align-content: start;
 }
 
@@ -555,47 +567,63 @@ body {
 }
 
 .pos-product-grid::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
+  background: #cbd5e1;
   border-radius: 3px;
 }
 
+/* Spacious Horizontal Product Card */
 .pos-product-card {
   background: #ffffff;
   border: 1px solid #e2e8f0;
   border-radius: 16px;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.2s ease;
   overflow: hidden;
   position: relative;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  padding: 12px 14px;
+  min-height: 112px;
+  box-shadow: 0 2px 5px rgba(15, 23, 42, 0.04);
 }
-
 
 .pos-product-card:hover {
   border-color: #2563eb;
-  background: #ffffff;
-  transform: translateY(-3px);
-  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.08);
+  transform: translateY(-2px);
+  box-shadow: 0 10px 22px -4px rgba(37, 99, 235, 0.15), 0 2px 6px -1px rgba(0, 0, 0, 0.04);
 }
-
 
 .pos-product-card.pos-out-of-stock {
-  opacity: 0.45;
+  opacity: 0.55;
+  filter: grayscale(0.2);
   cursor: not-allowed;
+  background: #f8fafc;
 }
 
+/* Larger Thumbnail Image Wrapper */
 .pos-product-img-wrapper {
   position: relative;
-  width: 100%;
-  height: 110px;
+  width: 76px;
+  height: 76px;
+  min-width: 76px;
+  border-radius: 12px;
   overflow: hidden;
-  background: #f1f5f9;
+  background: #f8fafc;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-right: 12px;
+  border: 1px solid #e2e8f0;
+  padding: 2px;
 }
 
 .pos-product-img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  border-radius: 10px;
 }
 
 .pos-product-img-placeholder {
@@ -604,90 +632,104 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #cbd5e1;
+  color: #94a3b8;
 }
 
 .pos-stock-badge {
   position: absolute;
-  top: 6px;
-  right: 6px;
-  padding: 2px 8px;
-  border-radius: 6px;
-  font-size: 0.65rem;
-  font-weight: 700;
+  top: 3px;
+  right: 3px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.62rem;
+  font-weight: 800;
   text-transform: uppercase;
+  letter-spacing: 0.4px;
+  z-index: 2;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
 }
 
 .pos-stock-low {
-  background: rgba(245, 158, 11, 0.9);
-  color: white;
+  background: #fef3c7;
+  color: #b45309;
+  border: 1px solid #fde68a;
 }
 
 .pos-stock-out {
-  background: rgba(239, 68, 68, 0.9);
-  color: white;
+  background: #fee2e2;
+  color: #dc2626;
+  border: 1px solid #fca5a5;
 }
 
+/* Product Info - Generous Vertical Spacing */
 .pos-product-info {
-  padding: 0.65rem 0.75rem 0.5rem;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+  padding-right: 6px;
 }
 
 .pos-product-name {
-  font-size: 0.82rem;
-  font-weight: 600;
+  font-size: 0.925rem;
+  font-weight: 700;
   color: #0f172a;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  margin-bottom: 0.25rem;
+  margin: 0;
+  line-height: 1.3;
 }
 
 .pos-product-meta {
   display: flex;
-  align-items: baseline;
-  gap: 0.15rem;
-  margin-bottom: 0.2rem;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .pos-product-price {
-  font-size: 1rem;
+  font-size: 0.95rem;
   font-weight: 800;
   color: #2563eb;
+  letter-spacing: -0.2px;
 }
 
-.pos-product-unit {
-  font-size: 0.7rem;
-  color: #94a3b8;
+.pos-product-stock-pill {
+  font-size: 0.72rem;
+  color: #475569;
+  font-weight: 700;
+  background: #f1f5f9;
+  padding: 2px 7px;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+  white-space: nowrap;
 }
 
-.pos-product-stock-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.25rem;
-}
-
-.pos-product-stock {
-  font-size: 0.7rem;
-  color: #94a3b8;
-}
-
-.pos-product-stock.low {
-  color: #f59e0b;
+.pos-product-min-badge {
+  font-size: 0.68rem;
+  color: #dc2626;
+  font-weight: 600;
+  background: #fef2f2;
+  padding: 2px 7px;
+  border-radius: 6px;
+  border: 1px solid #fee2e2;
+  width: fit-content;
 }
 
 .pos-product-barcode {
-  font-size: 0.6rem;
-  color: #cbd5e1;
+  font-size: 0.65rem;
+  color: #94a3b8;
   font-family: monospace;
 }
 
+/* Larger Add Button */
 .pos-product-add-btn {
-  position: absolute;
-  bottom: 8px;
-  right: 8px;
-  width: 30px;
-  height: 30px;
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
   border-radius: 10px;
   border: none;
   background: #2563eb;
@@ -696,17 +738,15 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.2s;
-  opacity: 0;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.3);
+  flex-shrink: 0;
+  margin-left: auto;
 }
 
 .pos-product-card:hover .pos-product-add-btn {
-  opacity: 1;
-}
-
-.pos-product-add-btn:hover {
   background: #1d4ed8;
-  transform: scale(1.1);
+  transform: scale(1.08);
 }
 
 /* Loading / Empty */
@@ -1869,9 +1909,14 @@ body {
 
 .pos-discount-input {
   margin-bottom: 1rem;
-  font-size: 1.15rem;
+  font-size: 1.25rem;
   font-weight: 700;
   text-align: center;
+  background: #ffffff !important;
+  color: #0f172a !important;
+  border: 2px solid #3b82f6 !important;
+  border-radius: 12px;
+  padding: 0.65rem;
 }
 
 /* Shift Summary Modal */
@@ -2106,6 +2151,62 @@ body {
   .pos-receipt-payment-badge {
     background: #eee !important;
     color: black !important;
+  }
+}
+
+/* ── Global Responsive Helpers & Mobile/Tablet Utilities ── */
+.table-responsive {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin-bottom: 1rem;
+}
+
+.table-responsive table {
+  min-width: 600px;
+}
+
+/* Touch target sizing for mobile devices */
+@media (pointer: coarse), (max-width: 768px) {
+  .touch-target {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
+/* Modal responsive bounds */
+.responsive-modal-content {
+  width: calc(100vw - 2rem);
+  max-width: 560px;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+@media (max-width: 640px) {
+  .base-container {
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+  }
+
+  .pos-login-container {
+    margin: 0.5rem;
+    min-height: auto;
+    border-radius: 16px;
+    flex-direction: column;
+  }
+
+  .pos-login-branding {
+    padding: 1.5rem 1rem;
+    border-right: none;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  }
+
+  .pos-login-form-section {
+    padding: 1.5rem 1rem;
+  }
+
+  .pos-login-features {
+    grid-template-columns: 1fr;
   }
 }
 

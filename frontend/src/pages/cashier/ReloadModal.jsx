@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Smartphone, Phone, CreditCard, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
+import { X, Smartphone, Phone, CreditCard, CheckCircle, AlertCircle, Loader2, TrendingUp, Package } from 'lucide-react';
 import { createReload } from '../../services/api';
 import { toast } from 'react-toastify';
 
@@ -11,6 +11,8 @@ const ReloadModal = ({ isOpen, onClose, storeId, accountId }) => {
     amount: '',
     type: 'Prepaid',
     paymentMethod: 'Cash',
+    profitPercentage: '4',
+    quantity: '1',
     notes: ''
   });
 
@@ -23,12 +25,14 @@ const ReloadModal = ({ isOpen, onClose, storeId, accountId }) => {
     { name: 'Other', color: '#64748b', logo: 'O' }
   ];
 
-  const types = ['Prepaid', 'Postpaid', 'Bill Payment'];
+  const types = ['Prepaid', 'Postpaid', 'Bill Payment', 'Scratch Card'];
   const methods = ['Cash', 'Card', 'Bank Transfer'];
+
+  const isScratchCard = formData.type === 'Scratch Card';
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!formData.mobileNumber || !formData.amount) {
+    if ((!formData.mobileNumber && !isScratchCard) || !formData.amount) {
       toast.error('Please fill in all required fields');
       return;
     }
@@ -42,27 +46,38 @@ const ReloadModal = ({ isOpen, onClose, storeId, accountId }) => {
       setLoading(true);
       await createReload({
         ...formData,
+        mobileNumber: formData.mobileNumber || (isScratchCard ? `CARD-${formData.operator}-${formData.amount}` : ''),
+        amount: Number(formData.amount),
+        quantity: Number(formData.quantity) || 1,
+        profitPercentage: Number(formData.profitPercentage) || 4,
+        isCard: isScratchCard,
+        cardDenomination: isScratchCard ? Number(formData.amount) : undefined,
         storeId,
         accountId
       });
-      toast.success('Reload successful! ✅');
+      toast.success(`${isScratchCard ? 'Scratch Card Sale' : 'Reload'} processed successfully! ✅`);
       setFormData({
         mobileNumber: '',
         operator: 'Dialog',
         amount: '',
         type: 'Prepaid',
         paymentMethod: 'Cash',
+        profitPercentage: '4',
+        quantity: '1',
         notes: ''
       });
       onClose();
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to process reload');
+      toast.error(err.response?.data?.message || 'Failed to process transaction');
     } finally {
       setLoading(false);
     }
   };
 
   if (!isOpen) return null;
+
+  const calculatedTotal = (Number(formData.amount) || 0) * (Number(formData.quantity) || 1);
+  const calculatedProfit = calculatedTotal * ((Number(formData.profitPercentage) || 4) / 100);
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
@@ -80,15 +95,15 @@ const ReloadModal = ({ isOpen, onClose, storeId, accountId }) => {
               <Smartphone size={32} />
             </div>
             <div>
-              <h2 className="text-2xl font-bold">Quick Reload</h2>
-              <p className="text-white/80 text-sm">Mobile Top-up & Bill Payments</p>
+              <h2 className="text-2xl font-bold">Quick Reload & Cards</h2>
+              <p className="text-white/80 text-sm">Mobile Top-up, Bills & Scratch Cards (4% Profit)</p>
             </div>
           </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-6">
+        <form onSubmit={handleSubmit} className="p-6 space-y-5">
           {/* Operator Selection */}
-          <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
+          <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
             {operators.map((op) => (
               <button
                 key={op.name}
@@ -101,7 +116,7 @@ const ReloadModal = ({ isOpen, onClose, storeId, accountId }) => {
                 }`}
               >
                 <div 
-                  className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-lg shadow-md"
+                  className="w-9 h-9 rounded-full flex items-center justify-center text-white font-bold text-base shadow-md"
                   style={{ backgroundColor: op.color }}
                 >
                   {op.logo}
@@ -111,33 +126,56 @@ const ReloadModal = ({ isOpen, onClose, storeId, accountId }) => {
             ))}
           </div>
 
+          {/* Type Selection */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-slate-700">Transaction Type</label>
+            <div className="grid grid-cols-2 sm:grid-cols-4 bg-slate-100 p-1 rounded-xl gap-1">
+              {types.map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => setFormData({ ...formData, type: t })}
+                  className={`py-2 text-[11px] font-bold rounded-lg transition-all ${
+                    formData.type === t ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500'
+                  }`}
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {/* Mobile Number */}
             <div className="space-y-1.5">
-              <label className="text-sm font-semibold text-slate-700">Mobile Number</label>
+              <label className="text-xs font-semibold text-slate-700">
+                {isScratchCard ? 'Mobile / Ref (Optional)' : 'Mobile Number'}
+              </label>
               <div className="relative">
-                <Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                <Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
                 <input
                   type="text"
-                  required
-                  placeholder="07x xxx xxxx"
-                  className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                  required={!isScratchCard}
+                  placeholder={isScratchCard ? "Optional card ref" : "07x xxx xxxx"}
+                  className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
                   value={formData.mobileNumber}
                   onChange={(e) => setFormData({ ...formData, mobileNumber: e.target.value })}
                 />
               </div>
             </div>
 
-            {/* Amount */}
+            {/* Amount / Card Denomination */}
             <div className="space-y-1.5">
-              <label className="text-sm font-semibold text-slate-700">Amount (Rs.)</label>
+              <label className="text-xs font-semibold text-slate-700">
+                {isScratchCard ? 'Card Denomination (Rs.)' : 'Amount (Rs.)'}
+              </label>
               <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold">Rs.</span>
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-xs">Rs.</span>
                 <input
                   type="number"
                   required
-                  placeholder="0.00"
-                  className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all font-bold text-indigo-600"
+                  placeholder="e.g. 100, 159, 200"
+                  className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-indigo-600 text-sm"
                   value={formData.amount}
                   onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
                 />
@@ -145,61 +183,64 @@ const ReloadModal = ({ isOpen, onClose, storeId, accountId }) => {
             </div>
           </div>
 
+          {/* Profit & Quantity inputs */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {/* Type Selection */}
-            <div className="space-y-1.5">
-              <label className="text-sm font-semibold text-slate-700">Reload Type</label>
-              <div className="flex bg-slate-100 p-1 rounded-xl">
-                {types.map((t) => (
-                  <button
-                    key={t}
-                    type="button"
-                    onClick={() => setFormData({ ...formData, type: t })}
-                    className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
-                      formData.type === t ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500'
-                    }`}
-                  >
-                    {t}
-                  </button>
-                ))}
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-slate-700 flex items-center justify-between">
+                <span>Profit Margin %</span>
+                <span className="text-[10px] text-emerald-600 font-bold">+Rs. {calculatedProfit.toFixed(2)} profit</span>
+              </label>
+              <div className="relative">
+                <TrendingUp className="absolute left-3 top-1/2 -translate-y-1/2 text-emerald-500" size={16} />
+                <input
+                  type="number"
+                  step="0.1"
+                  className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-emerald-600 text-sm"
+                  value={formData.profitPercentage}
+                  onChange={(e) => setFormData({ ...formData, profitPercentage: e.target.value })}
+                />
               </div>
             </div>
 
-            {/* Payment Method */}
-            <div className="space-y-1.5">
-              <label className="text-sm font-semibold text-slate-700">Payment Method</label>
-              <div className="flex bg-slate-100 p-1 rounded-xl">
-                {methods.map((m) => (
-                  <button
-                    key={m}
-                    type="button"
-                    onClick={() => setFormData({ ...formData, paymentMethod: m })}
-                    className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
-                      formData.paymentMethod === m ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500'
-                    }`}
-                  >
-                    {m}
-                  </button>
-                ))}
+            {isScratchCard ? (
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-700">Card Quantity</label>
+                <div className="relative">
+                  <Package className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                  <input
+                    type="number"
+                    min="1"
+                    className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-800 text-sm"
+                    value={formData.quantity}
+                    onChange={(e) => setFormData({ ...formData, quantity: e.target.value })}
+                  />
+                </div>
               </div>
-            </div>
-          </div>
-
-          {/* Notes */}
-          <div className="space-y-1.5">
-            <label className="text-sm font-semibold text-slate-700">Notes (Optional)</label>
-            <textarea
-              placeholder="Any additional details..."
-              className="w-full px-4 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all resize-none h-20"
-              value={formData.notes}
-              onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-            />
+            ) : (
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-700">Payment Method</label>
+                <div className="flex bg-slate-100 p-1 rounded-xl">
+                  {methods.map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => setFormData({ ...formData, paymentMethod: m })}
+                      className={`flex-1 py-1.5 text-[11px] font-bold rounded-lg transition-all ${
+                        formData.paymentMethod === m ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500'
+                      }`}
+                    >
+                      {m}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           {!accountId && (
-            <div className="flex items-center gap-2 p-4 bg-amber-50 border border-amber-200 rounded-2xl text-amber-800 text-sm animate-pulse">
-              <AlertCircle size={20} className="shrink-0" />
-              <p className="font-semibold">Warning: No target account selected in POS. Please select an account to enable reloads.</p>
+            <div className="flex items-center gap-2 p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-xs animate-pulse">
+              <AlertCircle size={18} className="shrink-0" />
+              <p className="font-semibold">No target account selected in POS. Select an account to process transactions.</p>
             </div>
           )}
 
@@ -207,18 +248,18 @@ const ReloadModal = ({ isOpen, onClose, storeId, accountId }) => {
           <button
             type="submit"
             disabled={loading || !accountId}
-            className={`w-full py-4 rounded-2xl text-white font-bold text-lg shadow-lg flex items-center justify-center gap-3 transition-all ${
+            className={`w-full py-3.5 rounded-2xl text-white font-bold text-base shadow-lg flex items-center justify-center gap-2 transition-all ${
               loading || !accountId
                 ? 'bg-slate-400 cursor-not-allowed' 
                 : 'bg-indigo-600 hover:bg-indigo-700 hover:shadow-indigo-200'
             }`}
           >
             {loading ? (
-              <Loader2 className="animate-spin" size={24} />
+              <Loader2 className="animate-spin" size={20} />
             ) : (
               <>
-                <CheckCircle size={24} />
-                Process Reload
+                <CheckCircle size={20} />
+                Process {isScratchCard ? 'Scratch Card Sale' : 'Reload'} (Total: Rs. {calculatedTotal.toLocaleString()})
               </>
             )}
           </button>

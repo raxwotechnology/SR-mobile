@@ -15,6 +15,11 @@ const protect = async (req, res, next) => {
 
       req.user = await User.findById(decoded.id).select('-password');
 
+      if (!req.user) {
+        res.status(401);
+        return next(new Error('User account not found. Please log out and log in again.'));
+      }
+
       return next();
     } catch (error) {
       console.error(error);
@@ -31,10 +36,10 @@ const protect = async (req, res, next) => {
 
 const authorize = (...roles) => {
   return (req, res, next) => {
-    if (!roles.includes(req.user.role)) {
+    if (!req.user || !roles.includes(req.user.role)) {
       res.status(403);
       return next(
-        new Error(`User role ${req.user.role} is not authorized to access this route`)
+        new Error(`User role ${req.user?.role} is not authorized to access this route`)
       );
     }
     next();
@@ -43,6 +48,11 @@ const authorize = (...roles) => {
 
 const requirePermission = (permission) => {
   return (req, res, next) => {
+    if (!req.user) {
+      res.status(401);
+      return next(new Error('Not authorized'));
+    }
+
     // Super Admin & Admin bypass
     if (req.user.email === 'admin@mobilehub.com' || req.user.role === 'admin' || req.user.isSuperAdmin) {
       return next();

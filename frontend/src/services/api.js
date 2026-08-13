@@ -270,6 +270,7 @@ export const createPettyCashEntry = (data) => API.post('/finance/petty-cash', da
 export const getTaxPayments = (params) => API.get('/finance/tax-payments', { params });
 export const createTaxPayment = (data) => API.post('/finance/tax-payments', data);
 export const getProfitReport = (params) => API.get('/finance/profit-report', { params });
+export const getBalanceReport = (params) => API.get('/finance/balance-report', { params });
 
 
 // Suppliers + Stock
@@ -353,14 +354,25 @@ export const getAccountTransactions = (id) => API.get(`/accounts/${id}/transacti
 // Hire Purchase
 export const getHPRecords = (params) => API.get('/hp', { params });
 export const getHPById = (id) => API.get(`/hp/${id}`);
+export const updateHPRecord = (id, data) => API.put(`/hp/${id}`, data);
 export const recordHPPayment = (id, data) => API.post(`/hp/${id}/payments`, data);
 export const getCustomerHistory = (phone) => API.get(`/hp/customer/${phone}/history`);
 export const getAllCustomers = () => API.get('/hp/customers/all');
 export const deleteHPRecord = (id) => API.delete(`/hp/${id}`);
 
-// Reloads
+
+// Reloads & Card Stock
 export const createReload = (data) => API.post('/reloads', data);
 export const getReloads = (params) => API.get('/reloads', { params });
+export const deleteReload = (id) => API.delete(`/reloads/${id}`);
+export const getCardStock = (params) => API.get('/reloads/card-stock', { params });
+export const addCardStock = (data) => API.post('/reloads/card-stock', data);
+export const updateCardStock = (id, data) => API.put(`/reloads/card-stock/${id}`, data);
+export const deleteCardStock = (id) => API.delete(`/reloads/card-stock/${id}`);
+export const getReloadStock = (params) => API.get('/reloads/reload-stock', { params });
+export const addReloadStock = (data) => API.post('/reloads/reload-stock', data);
+export const deleteReloadStock = (id) => API.delete(`/reloads/reload-stock/${id}`);
+export const recordDailyCardSales = (data) => API.post('/reloads/daily-sales', data);
 
 // Repairs
 export const getRepairs = (params) => API.get('/repairs', { params });

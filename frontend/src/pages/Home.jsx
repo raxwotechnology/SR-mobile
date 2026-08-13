@@ -5,6 +5,7 @@ import { motion } from 'framer-motion';
 import { getCategories, getFeaturedProducts, getDeals } from '../services/api';
 import ProductCard from '../components/ProductCard';
 import useSettingsStore from '../store/settingsStore';
+import { getImageUrl } from '../utils/imageHelper';
 
 const Home = () => {
   const [categories, setCategories] = useState([]);
@@ -70,7 +71,7 @@ const Home = () => {
                 {settings?.shopName || 'Mobile Hub'}
               </h2>
             </div>
-            <h1 className="text-4xl md:text-6xl font-bold leading-tight mb-6 mt-0">
+            <h1 className="text-3xl md:text-6xl font-bold leading-tight mb-6 mt-0">
               Premium tech and
               <br />
               <span className="bg-gradient-to-r from-blue-400 to-cyan-300 bg-clip-text text-transparent">
@@ -103,8 +104,13 @@ const Home = () => {
             transition={{ duration: 0.7, delay: 0.2 }}
           >
             <div className="relative">
-              <div className="w-80 h-80 md:w-96 md:h-96 rounded-full bg-gradient-to-br from-blue-900 to-slate-800 flex items-center justify-center shadow-2xl overflow-hidden border border-blue-500/30 backdrop-blur-md">
-                <span className="text-8xl">📱</span>
+              <div className="w-80 h-80 md:w-96 md:h-96 rounded-full overflow-hidden shadow-[0_0_50px_rgba(37,99,235,0.35)] border-4 border-blue-500/40 bg-white flex items-center justify-center">
+                <img
+                  src={getImageUrl(settings?.logoUrl) || '/logo.png'}
+                  alt={settings?.shopName || 'Shop Logo'}
+                  className="w-full h-full object-cover rounded-full transition-transform duration-500 hover:scale-105"
+                  onError={(e) => { e.target.onerror = null; e.target.src = '/logo.png'; }}
+                />
               </div>
               {/* Floating badges */}
               {heroProducts[0] && (
@@ -181,7 +187,7 @@ const Home = () => {
             <h2 className="text-2xl md:text-3xl font-bold text-slate-900 mt-0 mb-1">Explore Categories</h2>
             <p className="text-slate-500 m-0">Discover curated smart devices and accessories</p>
           </div>
-          <Link to="/categories" className="text-blue-600 hover:underline font-medium flex items-center gap-1">
+          <Link to="/shop" className="text-blue-600 hover:underline font-medium flex items-center gap-1">
             View All <ArrowRight size={16} />
           </Link>
         </motion.div>
@@ -228,7 +234,7 @@ const Home = () => {
                 View All <ArrowRight size={16} />
               </Link>
             </motion.div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-6">
               {deals.slice(0, 8).map((product, i) => (
                 <motion.div
                   key={product._id}
@@ -259,8 +265,8 @@ const Home = () => {
               View All <ArrowRight size={16} />
             </Link>
           </motion.div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
-            {featured.slice(0, 15).map((product, i) => (
+          <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-6">
+            {featured.slice(0, 8).map((product, i) => (
               <motion.div
                 key={product._id}
                 initial="hidden" whileInView="visible" viewport={{ once: true }}
@@ -274,30 +280,7 @@ const Home = () => {
       )}
 
       {/* ===== PROMOTIONAL BANNER ===== */}
-      <section className="base-container py-6">
-          <motion.div
-          className="bg-gradient-to-r from-blue-700 to-indigo-900 rounded-3xl p-8 md:p-12 flex flex-col md:flex-row items-center justify-between text-white overflow-hidden relative shadow-2xl"
-          initial="hidden" whileInView="visible" viewport={{ once: true }}
-          variants={fadeUp} transition={{ duration: 0.6 }}
-        >
-          <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2 blur-2xl"></div>
-          <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/10 rounded-full translate-y-1/2 -translate-x-1/2 blur-2xl"></div>
-          <div className="z-10 mb-6 md:mb-0">
-            <h3 className="text-2xl md:text-3xl font-bold mt-0 mb-2">Download the Mobile Hub App</h3>
-            <p className="text-blue-100 m-0 max-w-md">
-              Unlock exclusive device drops, personalized tech recommendations, and faster checkout from your phone.
-            </p>
-          </div>
-          <div className="z-10 flex gap-4">
-            <button className="bg-white text-blue-900 font-semibold py-3 px-6 rounded-full hover:bg-slate-100 transition-colors shadow-lg">
-              App Store
-            </button>
-            <button className="bg-white/10 text-white border border-white/20 font-semibold py-3 px-6 rounded-full hover:bg-white/20 transition-colors backdrop-blur-sm">
-              Play Store
-            </button>
-          </div>
-        </motion.div>
-      </section>
+   
 
       {/* ===== TESTIMONIALS ===== */}
       <section className="base-container py-12">
@@ -309,11 +292,12 @@ const Home = () => {
           <h2 className="text-2xl md:text-3xl font-bold text-slate-900 mt-0 mb-1">What Our Customers Say</h2>
           <p className="text-slate-500 m-0">Trusted by tech enthusiasts everywhere</p>
         </motion.div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           {[
             { name: 'Alex M.', text: "Got my new iPhone delivered the same day. Incredible service and the packaging was flawless. Highly recommended!", avatar: '👨‍💻', rating: 5 },
             { name: 'Sarah J.', text: "The range of accessories is unmatched. Found the perfect MagSafe case and wireless charger combo here.", avatar: '👩‍💼', rating: 5 },
             { name: 'Kevin D.', text: "Best tech store online. The warranty support is solid and the prices are always competitive.", avatar: '👨', rating: 4 },
+            { name: 'Maria L.', text: "Fast shipping and excellent customer service. Will definitely be shopping here again!", avatar: '👩', rating: 5 },
           ].map((testimonial, i) => (
             <motion.div
               key={i}
@@ -326,7 +310,7 @@ const Home = () => {
                   <Star key={j} size={16} className="fill-blue-500 text-blue-500" />
                 ))}
               </div>
-              <p className="text-slate-700 mb-4 italic">"{testimonial.text}"</p>
+              <p className="text-slate-700 mb-4">"{testimonial.text}"</p>
               <div className="flex items-center gap-3">
                 <span className="text-2xl">{testimonial.avatar}</span>
                 <span className="font-semibold text-slate-900">{testimonial.name}</span>

@@ -16,6 +16,8 @@ const AdminProfitReports = () => {
   // Filters
   const [category, setCategory] = useState('all');
   const [brand, setBrand] = useState('all');
+  const [filterMode, setFilterMode] = useState('single'); // 'single' | 'range'
+  const [singleDate, setSingleDate] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
@@ -70,43 +72,6 @@ const AdminProfitReports = () => {
   useEffect(() => {
     fetchProfitData();
   }, [category, brand, startDate, endDate, selectedStoreId]);
-
-  // Quick Date Select
-  const handleQuickDate = (rangeType) => {
-    const today = new Date();
-    let start = '';
-    let end = today.toISOString().split('T')[0];
-
-    switch (rangeType) {
-      case 'today':
-        start = end;
-        break;
-      case 'week': {
-
-        const prevWeek = new Date(today);
-        prevWeek.setDate(today.getDate() - 7);
-        start = prevWeek.toISOString().split('T')[0];
-        break;
-      }
-      case 'month': {
-
-        const prevMonth = new Date(today);
-        prevMonth.setMonth(today.getMonth() - 1);
-        start = prevMonth.toISOString().split('T')[0];
-        break;
-      }
-
-      case 'year':
-        start = `${today.getFullYear()}-01-01`;
-        break;
-      default:
-        start = '';
-        end = '';
-    }
-
-    setStartDate(start);
-    setEndDate(end);
-  };
 
   // Process item details for inline search and pagination
   const filteredItems = useMemo(() => {
@@ -223,15 +188,50 @@ const AdminProfitReports = () => {
 
         {/* Filters Panel */}
         <div className="bg-white rounded-2xl border border-card-border p-5 shadow-sm space-y-4">
-          <div className="flex items-center justify-between border-b border-gray-100 pb-2">
-            <span className="text-xs font-bold uppercase tracking-wider text-muted-text flex items-center gap-1">
-              🔍 Report Filters
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-gray-100 pb-3 gap-2">
+            <span className="text-xs font-bold uppercase tracking-wider text-muted-text flex items-center gap-1.5">
+              🔍 Profit Analysis & Date Filters
             </span>
-            <div className="flex items-center gap-1">
-              <button onClick={() => handleQuickDate('today')} className="text-[10px] bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 rounded">Today</button>
-              <button onClick={() => handleQuickDate('week')} className="text-[10px] bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 rounded">Last 7 Days</button>
-              <button onClick={() => handleQuickDate('month')} className="text-[10px] bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 rounded">Last 30 Days</button>
-              <button onClick={() => handleQuickDate('year')} className="text-[10px] bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 rounded">This Year</button>
+
+            <div className="flex items-center gap-2">
+              <div className="bg-gray-100 p-1 rounded-xl flex items-center gap-1 text-xs">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFilterMode('single');
+                    if (singleDate) {
+                      setStartDate(singleDate);
+                      setEndDate(singleDate);
+                    }
+                  }}
+                  className={`px-3 py-1 rounded-lg font-semibold transition-all ${filterMode === 'single' ? 'bg-white text-primary-blue shadow-sm' : 'text-gray-500 hover:text-dark-navy'}`}
+                >
+                  Specific Date
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFilterMode('range')}
+                  className={`px-3 py-1 rounded-lg font-semibold transition-all ${filterMode === 'range' ? 'bg-white text-primary-blue shadow-sm' : 'text-gray-500 hover:text-dark-navy'}`}
+                >
+                  Date Range
+                </button>
+              </div>
+
+              {(startDate || endDate || singleDate || category !== 'all' || brand !== 'all') && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSingleDate('');
+                    setStartDate('');
+                    setEndDate('');
+                    setCategory('all');
+                    setBrand('all');
+                  }}
+                  className="text-xs text-red-600 hover:text-red-700 font-semibold px-2.5 py-1 rounded-lg border border-red-200 hover:bg-red-50 transition-all flex items-center gap-1"
+                >
+                  Reset Filters
+                </button>
+              )}
             </div>
           </div>
           
@@ -266,29 +266,45 @@ const AdminProfitReports = () => {
               </select>
             </div>
 
-            <div>
-              <label className="text-[10px] uppercase font-bold text-muted-text block mb-1">From Date</label>
-              <div className="relative">
-                <input
-                  type="date"
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                  className="w-full border border-card-border rounded-xl py-1.5 px-3 text-xs focus:outline-none focus:ring-1 focus:ring-primary-blue text-dark-navy"
-                />
+            {filterMode === 'single' ? (
+              <div className="sm:col-span-2">
+                <label className="text-[10px] uppercase font-bold text-muted-text block mb-1">Select Specific Date</label>
+                <div className="relative">
+                  <input
+                    type="date"
+                    value={singleDate}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setSingleDate(val);
+                      setStartDate(val);
+                      setEndDate(val);
+                    }}
+                    className="w-full border border-card-border rounded-xl py-2 px-3 text-xs focus:outline-none focus:ring-1 focus:ring-primary-blue text-dark-navy font-semibold bg-white cursor-pointer"
+                  />
+                </div>
               </div>
-            </div>
-
-            <div>
-              <label className="text-[10px] uppercase font-bold text-muted-text block mb-1">To Date</label>
-              <div className="relative">
-                <input
-                  type="date"
-                  value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
-                  className="w-full border border-card-border rounded-xl py-1.5 px-3 text-xs focus:outline-none focus:ring-1 focus:ring-primary-blue text-dark-navy"
-                />
-              </div>
-            </div>
+            ) : (
+              <>
+                <div>
+                  <label className="text-[10px] uppercase font-bold text-muted-text block mb-1">From Date</label>
+                  <input
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className="w-full border border-card-border rounded-xl py-2 px-3 text-xs focus:outline-none focus:ring-1 focus:ring-primary-blue text-dark-navy font-medium bg-white cursor-pointer"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] uppercase font-bold text-muted-text block mb-1">To Date</label>
+                  <input
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    className="w-full border border-card-border rounded-xl py-2 px-3 text-xs focus:outline-none focus:ring-1 focus:ring-primary-blue text-dark-navy font-medium bg-white cursor-pointer"
+                  />
+                </div>
+              </>
+            )}
           </div>
         </div>
 

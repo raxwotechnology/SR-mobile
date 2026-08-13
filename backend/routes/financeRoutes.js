@@ -13,6 +13,7 @@ const {
   getTaxPayments,
   createTaxPayment,
   getProfitReport,
+  getBalanceReport,
 } = require('../controllers/financeController');
 
 const { protect, requirePermission } = require('../middleware/authMiddleware');
@@ -23,6 +24,7 @@ router.use(requirePermission('finance'));
 // Financial Dashboard (Aggregated stats & charts)
 router.get('/dashboard', getFinancialDashboard);
 router.get('/profit-report', getProfitReport);
+router.get('/balance-report', getBalanceReport);
 
 // Transaction Ledger (Incomes & Expenses)
 router.route('/transactions')

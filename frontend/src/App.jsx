@@ -40,6 +40,7 @@ import AdminReports from './pages/admin/AdminReports';
 import AdminSettings from './pages/admin/AdminSettings';
 import AdminExpenses from './pages/admin/AdminExpenses';
 import AdminFinancials from './pages/admin/AdminFinancials';
+import AdminBalanceReport from './pages/admin/AdminBalanceReport';
 import AdminProfitReports from './pages/admin/AdminProfitReports';
 import AdminInventory from './pages/admin/AdminInventory';
 import AdminPromotions from './pages/admin/AdminPromotions';
@@ -96,16 +97,14 @@ const AppLayout = ({ children }) => {
   }, [fetchSettings]);
 
   useEffect(() => {
-    if (settings?.logoUrl) {
-      let link = document.querySelector("link[rel~='icon']");
-      if (!link) {
-        link = document.createElement('link');
-        link.rel = 'icon';
-        document.getElementsByTagName('head')[0].appendChild(link);
-      }
-      link.href = settings.logoUrl;
+    let link = document.querySelector("link[rel~='icon']");
+    if (!link) {
+      link = document.createElement('link');
+      link.rel = 'icon';
+      document.getElementsByTagName('head')[0].appendChild(link);
     }
-  }, [settings]);
+    link.href = '/favicon.png';
+  }, []);
 
   const path = location.pathname;
 
@@ -121,9 +120,9 @@ const AppLayout = ({ children }) => {
 
   if (isNoLayout) return <>{children}</>;
   return (
-    <div className="flex flex-col min-h-screen">
+    <div className="flex flex-col min-h-screen w-full bg-slate-50">
       <Navbar />
-      <main className="flex-grow">{children}</main>
+      <main className="flex-1 w-full flex flex-col">{children}</main>
       <Footer />
     </div>
   );
@@ -144,6 +143,7 @@ function App() {
           <Route path="/stores" element={<StoreList />} />
           <Route path="/store/:id" element={<StoreDetail />} />
           <Route path="/deals" element={<Deals />} />
+          <Route path="/categories" element={<Shop />} />
 
           {/* Customer */}
           <Route path="/cart" element={<ProtectedRoute><CartPage /></ProtectedRoute>} />
@@ -184,7 +184,8 @@ function App() {
           <Route path="/admin/settings" element={<ProtectedRoute roles={['admin']} permission="settings"><AdminSettings /></ProtectedRoute>} />
           <Route path="/admin/expenses" element={<ProtectedRoute roles={['admin']} permission="finance"><AdminExpenses /></ProtectedRoute>} />
           <Route path="/admin/financials" element={<ProtectedRoute roles={['admin']} permission="finance"><AdminFinancials /></ProtectedRoute>} />
-          <Route path="/admin/profit-reports" element={<ProtectedRoute roles={['admin']} permission="finance"><AdminProfitReports /></ProtectedRoute>} />
+          <Route path="/admin/balance-report" element={<ProtectedRoute roles={['admin']} permission="finance"><AdminBalanceReport /></ProtectedRoute>} />
+          <Route path="/admin/profit-reports" element={<Navigate to="/admin/financials?tab=profit" replace />} />
           <Route path="/admin/promotions" element={<ProtectedRoute roles={['admin']} permission="sales"><AdminPromotions /></ProtectedRoute>} />
           <Route path="/admin/barcodes" element={<ProtectedRoute roles={['admin']} permission="products"><AdminBarcodes /></ProtectedRoute>} />
           <Route path="/admin/supplier-payments" element={<ProtectedRoute roles={['admin']} permission="suppliers"><AdminSupplierPayments /></ProtectedRoute>} />

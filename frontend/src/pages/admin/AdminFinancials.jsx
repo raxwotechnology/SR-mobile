@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { DollarSign, TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight, RefreshCw, FileText, Plus, Search } from 'lucide-react';
 import DashboardLayout from '../../components/DashboardLayout';
 import {
@@ -23,7 +24,21 @@ const PIE_COLORS = ['#d946a0', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#06b
 const BRANDS_LIST = ['all', 'Apple', 'Samsung', 'Xiaomi', 'Oppo', 'Vivo', 'Realme', 'Huawei', 'OnePlus', 'Anker', 'JBL', 'Baseus'];
 
 const AdminFinancials = () => {
-  const [activeTab, setActiveTab] = useState('overview'); // overview | petty-cash | tax | profit
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialTab = searchParams.get('tab') || 'overview';
+  const [activeTab, setActiveTabState] = useState(initialTab); // overview | petty-cash | tax | profit
+
+  useEffect(() => {
+    const tabFromUrl = searchParams.get('tab');
+    if (tabFromUrl && tabFromUrl !== activeTab) {
+      setActiveTabState(tabFromUrl);
+    }
+  }, [searchParams]);
+
+  const setActiveTab = (tab) => {
+    setActiveTabState(tab);
+    setSearchParams({ tab });
+  };
   const [dashboard, setDashboard] = useState(null);
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState('monthly'); // daily | monthly | yearly
@@ -436,12 +451,12 @@ const AdminFinancials = () => {
               </div>
               <div className="bg-white rounded-2xl border border-card-border p-5 shadow-sm">
                 <div className="flex items-center gap-2 mb-2">
-                  <div className={`w-9 h-9 rounded-xl bg-gradient-to-br ${profitPositive ? 'from-emerald-500 to-teal-600' : 'from-red-500 to-blue-600'} flex items-center justify-center`}>
-                    {profitPositive ? <TrendingUp size={16} className="text-white" /> : <TrendingDown size={16} className="text-white" />}
+                  <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center">
+                    <TrendingUp size={16} className="text-white" />
                   </div>
                 </div>
-                <p className={`text-2xl font-bold ${profitPositive ? 'text-emerald-600' : 'text-red-600'}`}>Rs. {Math.abs(d.netProfit || 0).toLocaleString()}</p>
-                <p className="text-xs text-muted-text mt-1">Net {profitPositive ? 'Profit' : 'Loss'}</p>
+                <p className="text-2xl font-bold text-emerald-600">Rs. {(d.totalIncome || 0).toLocaleString()}</p>
+                <p className="text-xs text-muted-text mt-1">Total Income</p>
               </div>
               <div className="bg-white rounded-2xl border border-card-border p-5 shadow-sm">
                 <p className="text-xs text-muted-text">Pending Bills</p>

@@ -1,5 +1,5 @@
 import { useState, useEffect, Fragment } from 'react';
-import { CheckCircle, XCircle, ChevronDown, ChevronUp, MoreVertical, Printer, MessageSquare, Edit, FileText, Eye, Trash2 } from 'lucide-react';
+import { CheckCircle, XCircle, ChevronDown, ChevronUp, MoreVertical, Printer, MessageSquare, Edit, FileText, Eye, Trash2, Plus, ShoppingBag } from 'lucide-react';
 import DashboardLayout from '../../components/DashboardLayout';
 import DeleteConfirmationModal from '../../components/DeleteConfirmationModal';
 
@@ -12,7 +12,8 @@ import {
   getAvailableDeliveryGuys,
   getCategories,
   updateOrderAdmin,
-  deleteAdminOrder
+  deleteAdminOrder,
+  getAdminProducts
 } from '../../services/api';
 import useCurrencyStore from '../../store/currencyStore';
 import { toast } from 'react-toastify';
@@ -56,6 +57,7 @@ const AdminOrders = () => {
   const [expandedId, setExpandedId] = useState(null);
   const [deliveryGuys, setDeliveryGuys] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [allProducts, setAllProducts] = useState([]);
   const { convertPrice, formatPrice } = useCurrencyStore();
   const { selectedStoreId } = useAdminStoreStore();
 
@@ -69,10 +71,19 @@ const AdminOrders = () => {
 
   const [editForm, setEditForm] = useState({
     id: '',
+    invoiceNumber: '',
     customerName: '',
     customerPhone: '',
+    customerNic: '',
+    customerAddress: '',
     orderStatus: 'pending',
-    paymentStatus: 'pending'
+    paymentStatus: 'pending',
+    paymentMethod: 'cash',
+    discountAmount: 0,
+    deliveryFee: 0,
+    tax: 0,
+    amountPaid: 0,
+    items: []
   });
 
   const fetchFiltersData = async () => {
@@ -192,32 +203,123 @@ const AdminOrders = () => {
     toast.info(`Receipt for invoice #${order.invoiceNumber || order._id.slice(-8).toUpperCase()} sent to print queue.`);
   };
 
-  const openLiveEdit = (order) => {
+  const openLiveEdit = async (order) => {
+    try {
+      const { data: prods } = await getAdminProducts(selectedStoreId !== 'all' ? { storeId: selectedStoreId } : {});
+      setAllProducts(prods || []);
+    } catch (err) {
+      console.error('Failed to load products list', err);
+    }
+
     setEditForm({
       id: order._id,
+      invoiceNumber: order.invoiceNumber || order._id.slice(-8).toUpperCase(),
       customerName: order.customerName || order.userId?.name || '',
       customerPhone: order.customerPhone || order.userId?.phone || '',
+      customerNic: order.customerNic || '',
+      customerAddress: typeof order.customerAddress === 'string' ? order.customerAddress : (order.deliveryAddress?.street || ''),
       orderStatus: order.orderStatus,
-      paymentStatus: order.paymentStatus
+      paymentStatus: order.paymentStatus,
+      paymentMethod: order.paymentMethod || 'cash',
+      discountAmount: order.discountAmount || 0,
+      deliveryFee: order.deliveryFee || 0,
+      tax: order.tax || 0,
+      amountPaid: order.amountPaid || 0,
+      items: (order.items || []).map((i) => ({
+        productId: i.productId?._id || i.productId,
+        name: i.name,
+        image: i.image,
+        quantity: i.quantity,
+        price: i.price,
+        imei: Array.isArray(i.imei) ? i.imei.join(', ') : (i.imei || '')
+      }))
     });
     setShowEditModal(true);
     setActionMenuId(null);
   };
 
+  const handleItemQtyChange = (index, qty) => {
+    const newItems = [...editForm.items];
+    newItems[index].quantity = Math.max(1, Number(qty || 1));
+    setEditForm({ ...editForm, items: newItems });
+  };
+
+  const handleItemPriceChange = (index, price) => {
+    const newItems = [...editForm.items];
+    newItems[index].price = Math.max(0, Number(price || 0));
+    setEditForm({ ...editForm, items: newItems });
+  };
+
+  const handleRemoveItem = (index) => {
+    if (editForm.items.length <= 1) {
+      toast.warning('Order must contain at least one item');
+      return;
+    }
+    const newItems = editForm.items.filter((_, i) => i !== index);
+    setEditForm({ ...editForm, items: newItems });
+  };
+
+  const handleAddProductToEdit = (productId) => {
+    if (!productId) return;
+    const product = allProducts.find((p) => p._id === productId);
+    if (!product) return;
+
+    const existingIdx = editForm.items.findIndex((i) => i.productId === product._id);
+    if (existingIdx >= 0) {
+      const newItems = [...editForm.items];
+      newItems[existingIdx].quantity += 1;
+      setEditForm({ ...editForm, items: newItems });
+    } else {
+      setEditForm({
+        ...editForm,
+        items: [
+          ...editForm.items,
+          {
+            productId: product._id,
+            name: product.name,
+            image: product.images?.[0] || '',
+            quantity: 1,
+            price: product.priceLKR || product.price || 0,
+            imei: ''
+          }
+        ]
+      });
+    }
+  };
+
   const handleSaveLiveEdit = async (e) => {
     e.preventDefault();
+    if (!editForm.items || editForm.items.length === 0) {
+      toast.error('Order must have at least one product item');
+      return;
+    }
     try {
       await updateOrderAdmin(editForm.id, {
         customerName: editForm.customerName,
         customerPhone: editForm.customerPhone,
+        customerNic: editForm.customerNic,
+        customerAddress: editForm.customerAddress,
         orderStatus: editForm.orderStatus,
-        paymentStatus: editForm.paymentStatus
+        paymentStatus: editForm.paymentStatus,
+        paymentMethod: editForm.paymentMethod,
+        discountAmount: Number(editForm.discountAmount || 0),
+        deliveryFee: Number(editForm.deliveryFee || 0),
+        tax: Number(editForm.tax || 0),
+        amountPaid: Number(editForm.amountPaid || 0),
+        items: editForm.items.map((i) => ({
+          productId: i.productId,
+          name: i.name,
+          image: i.image,
+          quantity: Number(i.quantity || 1),
+          price: Number(i.price || 0),
+          imei: i.imei ? i.imei.split(',').map(s => s.trim()).filter(Boolean) : []
+        }))
       });
-      toast.success('Order updated successfully');
+      toast.success('Invoice & Order updated successfully! ✅');
       setShowEditModal(false);
       fetchOrders();
     } catch (err) {
-      toast.error('Failed to save order details');
+      toast.error(err.response?.data?.message || 'Failed to save order details');
     }
   };
 
@@ -557,79 +659,291 @@ const AdminOrders = () => {
 
         {/* Live Edit Modal */}
         {showEditModal && (
-          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl border border-card-border shadow-2xl w-full max-w-md overflow-hidden animate-fade-in">
-              <div className="px-6 py-4 border-b border-card-border flex justify-between items-center bg-gray-50">
-                <h3 className="font-bold text-dark-navy text-sm">✏️ Live Edit Order Details</h3>
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-3xl border border-card-border shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden animate-fade-in">
+              {/* Header */}
+              <div className="px-6 py-4 border-b border-card-border flex justify-between items-center bg-slate-50">
+                <div>
+                  <h3 className="font-bold text-dark-navy text-base flex items-center gap-2">
+                    ✏️ Edit Invoice / Order #{editForm.invoiceNumber}
+                  </h3>
+                  <p className="text-xs text-muted-text">Correct mistakes, modify products, edit prices/quantities, and update customer info</p>
+                </div>
                 <button
                   onClick={() => setShowEditModal(false)}
-                  className="text-muted-text hover:text-dark-navy font-bold text-base"
+                  className="text-muted-text hover:text-dark-navy font-bold text-lg px-2"
                 >
                   ✕
                 </button>
               </div>
 
-              <form onSubmit={handleSaveLiveEdit} className="p-6 space-y-4">
-                <div>
-                  <label className="text-xs font-semibold text-muted-text block mb-1">Customer Name</label>
-                  <input
-                    type="text"
-                    value={editForm.customerName}
-                    onChange={(e) => setEditForm({ ...editForm, customerName: e.target.value })}
-                    className="w-full border border-card-border rounded-xl py-2 px-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary-blue"
-                  />
+              <form onSubmit={handleSaveLiveEdit} className="p-6 overflow-y-auto space-y-6 flex-1 text-xs">
+                {/* Customer Information */}
+                <div className="bg-slate-50/70 p-4 rounded-2xl border border-card-border space-y-3">
+                  <h4 className="font-bold text-dark-navy uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                    👤 Customer & Shipping Information
+                  </h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+                    <div>
+                      <label className="text-[10px] font-bold text-muted-text uppercase block mb-1">Customer Name</label>
+                      <input
+                        type="text"
+                        value={editForm.customerName}
+                        onChange={(e) => setEditForm({ ...editForm, customerName: e.target.value })}
+                        className="w-full border border-card-border rounded-xl py-2 px-3 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-primary-blue font-medium"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-muted-text uppercase block mb-1">Phone Number</label>
+                      <input
+                        type="text"
+                        value={editForm.customerPhone}
+                        onChange={(e) => setEditForm({ ...editForm, customerPhone: e.target.value })}
+                        className="w-full border border-card-border rounded-xl py-2 px-3 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-primary-blue font-medium"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-muted-text uppercase block mb-1">NIC Number</label>
+                      <input
+                        type="text"
+                        value={editForm.customerNic}
+                        onChange={(e) => setEditForm({ ...editForm, customerNic: e.target.value })}
+                        className="w-full border border-card-border rounded-xl py-2 px-3 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-primary-blue font-medium"
+                        placeholder="Optional"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-muted-text uppercase block mb-1">Address</label>
+                      <input
+                        type="text"
+                        value={editForm.customerAddress}
+                        onChange={(e) => setEditForm({ ...editForm, customerAddress: e.target.value })}
+                        className="w-full border border-card-border rounded-xl py-2 px-3 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-primary-blue font-medium"
+                        placeholder="Shipping address"
+                      />
+                    </div>
+                  </div>
                 </div>
 
-                <div>
-                  <label className="text-xs font-semibold text-muted-text block mb-1">Customer Phone</label>
-                  <input
-                    type="text"
-                    value={editForm.customerPhone}
-                    onChange={(e) => setEditForm({ ...editForm, customerPhone: e.target.value })}
-                    className="w-full border border-card-border rounded-xl py-2 px-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary-blue"
-                  />
+                {/* Order Items & Products Table */}
+                <div className="bg-white rounded-2xl border border-card-border p-4 space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <h4 className="font-bold text-dark-navy uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                      📦 Purchased Products List ({editForm.items.length} items)
+                    </h4>
+                    <div className="flex items-center gap-2">
+                      <select
+                        onChange={(e) => {
+                          handleAddProductToEdit(e.target.value);
+                          e.target.value = '';
+                        }}
+                        className="border border-card-border rounded-xl py-1.5 px-3 text-xs bg-indigo-50/50 text-primary-blue font-semibold focus:outline-none cursor-pointer"
+                      >
+                        <option value="">+ Add Product from Catalog...</option>
+                        {allProducts.map((p) => (
+                          <option key={p._id} value={p._id}>
+                            {p.name} (Rs. {(p.priceLKR || p.price)?.toLocaleString()} - Stock: {p.stock})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="border border-card-border rounded-xl overflow-hidden">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="bg-slate-50 text-[10px] uppercase font-bold text-muted-text border-b border-card-border">
+                          <th className="px-3 py-2">Product Name</th>
+                          <th className="px-3 py-2 w-28 text-center">Qty</th>
+                          <th className="px-3 py-2 w-32 text-right">Unit Price (Rs.)</th>
+                          <th className="px-3 py-2 w-32 text-right">Subtotal</th>
+                          <th className="px-3 py-2 w-12 text-center">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-card-border">
+                        {editForm.items.map((item, idx) => (
+                          <tr key={idx} className="hover:bg-slate-50/50">
+                            <td className="px-3 py-2">
+                              <p className="font-semibold text-dark-navy">{item.name}</p>
+                              <input
+                                type="text"
+                                placeholder="IMEI / Serial numbers (comma separated)"
+                                value={item.imei}
+                                onChange={(e) => {
+                                  const newItems = [...editForm.items];
+                                  newItems[idx].imei = e.target.value;
+                                  setEditForm({ ...editForm, items: newItems });
+                                }}
+                                className="w-full mt-1 border border-slate-200 rounded-lg py-1 px-2 text-[10px] font-mono focus:outline-none focus:border-primary-blue"
+                              />
+                            </td>
+                            <td className="px-3 py-2 text-center">
+                              <input
+                                type="number"
+                                min="1"
+                                value={item.quantity}
+                                onChange={(e) => handleItemQtyChange(idx, e.target.value)}
+                                className="w-16 border border-card-border rounded-lg py-1 px-2 text-center text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-primary-blue"
+                              />
+                            </td>
+                            <td className="px-3 py-2 text-right">
+                              <input
+                                type="number"
+                                min="0"
+                                value={item.price}
+                                onChange={(e) => handleItemPriceChange(idx, e.target.value)}
+                                className="w-24 border border-card-border rounded-lg py-1 px-2 text-right text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-primary-blue"
+                              />
+                            </td>
+                            <td className="px-3 py-2 text-right font-bold text-dark-navy">
+                              Rs. {(Number(item.price || 0) * Number(item.quantity || 0)).toLocaleString()}
+                            </td>
+                            <td className="px-3 py-2 text-center">
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveItem(idx)}
+                                className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition-all"
+                                title="Remove product"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
 
-                <div>
-                  <label className="text-xs font-semibold text-muted-text block mb-1">Order Status</label>
-                  <select
-                    value={editForm.orderStatus}
-                    onChange={(e) => setEditForm({ ...editForm, orderStatus: e.target.value })}
-                    className="w-full border border-card-border rounded-xl py-2 px-3 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-primary-blue"
-                  >
-                    {statusFlow.map((s) => (
-                      <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>
-                    ))}
-                  </select>
+                {/* Financials & Status Section */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Left: Statuses & Payment Method */}
+                  <div className="bg-slate-50/70 p-4 rounded-2xl border border-card-border space-y-3">
+                    <h4 className="font-bold text-dark-navy uppercase tracking-wider text-[11px]">
+                      ⚙️ Order Statuses & Method
+                    </h4>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-[10px] font-bold text-muted-text uppercase block mb-1">Order Status</label>
+                        <select
+                          value={editForm.orderStatus}
+                          onChange={(e) => setEditForm({ ...editForm, orderStatus: e.target.value })}
+                          className="w-full border border-card-border rounded-xl py-2 px-3 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-primary-blue font-semibold"
+                        >
+                          {statusFlow.map((s) => (
+                            <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="text-[10px] font-bold text-muted-text uppercase block mb-1">Payment Status</label>
+                        <select
+                          value={editForm.paymentStatus}
+                          onChange={(e) => setEditForm({ ...editForm, paymentStatus: e.target.value })}
+                          className="w-full border border-card-border rounded-xl py-2 px-3 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-primary-blue font-semibold"
+                        >
+                          <option value="pending">pending</option>
+                          <option value="completed">completed</option>
+                          <option value="failed">failed</option>
+                          <option value="refunded">refunded</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-bold text-muted-text uppercase block mb-1">Payment Method</label>
+                      <select
+                        value={editForm.paymentMethod}
+                        onChange={(e) => setEditForm({ ...editForm, paymentMethod: e.target.value })}
+                        className="w-full border border-card-border rounded-xl py-2 px-3 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-primary-blue font-semibold"
+                      >
+                        <option value="cash">Cash</option>
+                        <option value="card">Card</option>
+                        <option value="bank_transfer">Bank Transfer</option>
+                        <option value="koko">Koko Pay</option>
+                        <option value="hire_purchase">Hire Purchase (HP)</option>
+                        <option value="cod">Cash on Delivery</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Right: Amounts Summary */}
+                  <div className="bg-slate-50/70 p-4 rounded-2xl border border-card-border space-y-2">
+                    <h4 className="font-bold text-dark-navy uppercase tracking-wider text-[11px] mb-2">
+                      💳 Financial Adjustments
+                    </h4>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div>
+                        <label className="text-[10px] font-bold text-muted-text uppercase block mb-0.5">Discount (Rs.)</label>
+                        <input
+                          type="number"
+                          min="0"
+                          value={editForm.discountAmount}
+                          onChange={(e) => setEditForm({ ...editForm, discountAmount: e.target.value })}
+                          className="w-full border border-card-border rounded-xl py-1.5 px-3 text-xs bg-white font-semibold"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-bold text-muted-text uppercase block mb-0.5">Delivery Fee (Rs.)</label>
+                        <input
+                          type="number"
+                          min="0"
+                          value={editForm.deliveryFee}
+                          onChange={(e) => setEditForm({ ...editForm, deliveryFee: e.target.value })}
+                          className="w-full border border-card-border rounded-xl py-1.5 px-3 text-xs bg-white font-semibold"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-bold text-muted-text uppercase block mb-0.5">Tax (Rs.)</label>
+                        <input
+                          type="number"
+                          min="0"
+                          value={editForm.tax}
+                          onChange={(e) => setEditForm({ ...editForm, tax: e.target.value })}
+                          className="w-full border border-card-border rounded-xl py-1.5 px-3 text-xs bg-white font-semibold"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-bold text-muted-text uppercase block mb-0.5">Amount Paid (Rs.)</label>
+                        <input
+                          type="number"
+                          min="0"
+                          value={editForm.amountPaid}
+                          onChange={(e) => setEditForm({ ...editForm, amountPaid: e.target.value })}
+                          className="w-full border border-card-border rounded-xl py-1.5 px-3 text-xs bg-white font-semibold text-emerald-600"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="pt-2 border-t border-card-border flex justify-between items-center">
+                      <span className="font-bold text-dark-navy text-xs">Recalculated Net Total:</span>
+                      <span className="text-sm font-extrabold text-primary-blue">
+                        Rs. {(
+                          editForm.items.reduce((sum, i) => sum + (Number(i.price || 0) * Number(i.quantity || 0)), 0)
+                          - Number(editForm.discountAmount || 0)
+                          + Number(editForm.deliveryFee || 0)
+                          + Number(editForm.tax || 0)
+                        ).toLocaleString()}
+                      </span>
+                    </div>
+                  </div>
                 </div>
 
-                <div>
-                  <label className="text-xs font-semibold text-muted-text block mb-1">Payment Status</label>
-                  <select
-                    value={editForm.paymentStatus}
-                    onChange={(e) => setEditForm({ ...editForm, paymentStatus: e.target.value })}
-                    className="w-full border border-card-border rounded-xl py-2 px-3 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-primary-blue"
-                  >
-                    <option value="pending">pending</option>
-                    <option value="completed">completed</option>
-                    <option value="failed">failed</option>
-                    <option value="refunded">refunded</option>
-                  </select>
-                </div>
-
-                <div className="flex gap-2 justify-end pt-2">
+                {/* Modal Actions */}
+                <div className="flex gap-2 justify-end pt-2 border-t border-card-border">
                   <button
                     type="button"
                     onClick={() => setShowEditModal(false)}
-                    className="px-4 py-2 border border-card-border rounded-xl text-xs font-semibold hover:bg-gray-50 text-muted-text"
+                    className="px-5 py-2.5 border border-card-border rounded-xl text-xs font-semibold hover:bg-gray-50 text-muted-text transition-all"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 bg-primary-blue hover:bg-blue-600 text-white rounded-xl text-xs font-semibold shadow-sm"
+                    className="px-6 py-2.5 bg-primary-blue hover:bg-blue-600 text-white rounded-xl text-xs font-bold shadow-md transition-all flex items-center gap-1.5"
                   >
-                    Save Changes
+                    💾 Save Invoice & Order Changes
                   </button>
                 </div>
               </form>

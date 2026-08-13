@@ -4,6 +4,7 @@ import DashboardLayout from '../../components/DashboardLayout';
 import { getMe, updateProfile, uploadImage } from '../../services/api';
 import { toast } from 'react-toastify';
 import useAuthStore from '../../store/authStore';
+import useSettingsStore from '../../store/settingsStore';
 import { getImageUrl } from '../../utils/imageHelper';
 import { Link } from 'react-router-dom';
 
@@ -15,6 +16,7 @@ const navItems = [
 
 const Profile = () => {
   const { user, login } = useAuthStore();
+  const settings = useSettingsStore((s) => s.settings);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -295,6 +297,104 @@ const Profile = () => {
             {saving ? 'Saving...' : 'Save Changes'}
           </button>
         </form>
+
+        {/* Help Center & Support Contacts */}
+        <div id="help-center" className="mt-8 bg-slate-900 text-white rounded-3xl p-6 sm:p-8 shadow-xl border border-slate-800 space-y-6">
+          <div className="flex items-center gap-3 border-b border-white/10 pb-4">
+            <div className="w-12 h-12 rounded-2xl bg-blue-600/30 border border-blue-400/30 flex items-center justify-center text-blue-400 text-2xl">
+              🎧
+            </div>
+            <div>
+              <h3 className="text-xl font-extrabold text-white m-0">Help Center & Support Hotlines</h3>
+              <p className="text-xs text-blue-300 m-0">Direct shop, admin, and management support contact details</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {/* 1. Shop Support */}
+            <div className="bg-white/5 border border-white/10 rounded-2xl p-5 backdrop-blur-sm space-y-3">
+              <div className="flex items-center gap-2 text-blue-400 font-bold text-sm">
+                <span>🛍️</span> Shop Support
+              </div>
+              <div className="space-y-2 text-xs text-slate-300">
+                <p className="flex items-center gap-2 m-0">
+                  <Phone size={14} className="text-blue-400 shrink-0" />
+                  <span className="font-semibold">{settings?.phone || '+94 11 255 5000'}</span>
+                </p>
+                {settings?.phone2 && (
+                  <p className="flex items-center gap-2 m-0">
+                    <Phone size={14} className="text-blue-400 shrink-0" />
+                    <span>{settings.phone2}</span>
+                  </p>
+                )}
+                <p className="flex items-center gap-2 m-0">
+                  <Mail size={14} className="text-blue-400 shrink-0" />
+                  <span>{settings?.email || 'support@mobilehub.com'}</span>
+                </p>
+                <p className="flex items-start gap-2 m-0 text-[11px] text-slate-400 pt-1 border-t border-white/5">
+                  <MapPin size={14} className="text-blue-400 shrink-0 mt-0.5" />
+                  <span>{settings?.address || '88 Tech Avenue, Colombo 03'}</span>
+                </p>
+              </div>
+            </div>
+
+            {/* 2. Admin Support */}
+            <div className="bg-white/5 border border-white/10 rounded-2xl p-5 backdrop-blur-sm space-y-3">
+              <div className="flex items-center gap-2 text-emerald-400 font-bold text-sm">
+                <span>🛡️</span> Admin Support
+              </div>
+              <div className="space-y-2 text-xs text-slate-300">
+                <p className="flex items-center gap-2 m-0">
+                  <Phone size={14} className="text-emerald-400 shrink-0" />
+                  <span className="font-semibold">{settings?.phone || '+94 77 123 4567'}</span>
+                </p>
+                <p className="flex items-center gap-2 m-0">
+                  <Mail size={14} className="text-emerald-400 shrink-0" />
+                  <span>{settings?.email || 'admin@raxwo.net'}</span>
+                </p>
+                <div className="pt-2">
+                  <span className="inline-block px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-bold uppercase">
+                    Account & Payments Escalation
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* 3. Manager Support */}
+            <div className="bg-white/5 border border-white/10 rounded-2xl p-5 backdrop-blur-sm space-y-3">
+              <div className="flex items-center gap-2 text-amber-400 font-bold text-sm">
+                <span>👔</span> Store Manager
+              </div>
+              <div className="space-y-2 text-xs text-slate-300">
+                <p className="flex items-center gap-2 m-0">
+                  <Phone size={14} className="text-amber-400 shrink-0" />
+                  <span className="font-semibold">{settings?.phone2 || settings?.phone || '+94 71 987 6543'}</span>
+                </p>
+                <p className="flex items-center gap-2 m-0">
+                  <Mail size={14} className="text-amber-400 shrink-0" />
+                  <span>manager@mobilehub.com</span>
+                </p>
+                <div className="pt-2">
+                  <span className="inline-block px-2.5 py-1 rounded-full bg-amber-500/20 text-amber-300 text-[10px] font-bold uppercase">
+                    Orders & Return Queries
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-4 pt-4 border-t border-white/10 text-xs text-slate-400">
+            <p className="m-0">⏰ <strong>Operating Hours:</strong> Mon - Sat: 8:30 AM - 7:00 PM | Sun: 9:00 AM - 5:00 PM</p>
+            <div className="flex gap-2">
+              <a href={`tel:${settings?.phone || '+94112555000'}`} className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-4 py-2 rounded-xl transition-colors">
+                📞 Call Shop
+              </a>
+              <a href={`mailto:${settings?.email || 'support@mobilehub.com'}`} className="bg-white/10 hover:bg-white/20 text-white font-bold px-4 py-2 rounded-xl transition-colors">
+                ✉️ Email Support
+              </a>
+            </div>
+          </div>
+        </div>
       </div>
 
       {showDeleteConfirm && (

@@ -332,8 +332,16 @@ const AdminSalesTracking = () => {
                                   <td className="p-3 text-right font-medium">Rs. {item.unitPrice.toLocaleString()}</td>
                                   <td className="p-3 text-center font-bold text-gray-800">{item.quantity}</td>
                                   <td className="p-3 text-right font-bold text-emerald-600">Rs. {item.totalPrice.toLocaleString()}</td>
-                                  <td className="p-3 font-mono text-[10px] text-gray-500 max-w-[120px] truncate" title={item.imeis.join(', ')}>
-                                    {item.imeis.length > 0 ? item.imeis.join(', ') : '—'}
+                                  <td className="p-3">
+                                    {item.imeis.length > 0 ? (
+                                      <div className="flex flex-wrap gap-1 max-w-[200px] max-h-16 overflow-y-auto scrollbar-thin">
+                                        {item.imeis.map((im, i) => (
+                                          <span key={i} className="bg-indigo-50 border border-indigo-100 text-indigo-700 font-mono text-[9px] px-1.5 py-0.5 rounded font-semibold" title={im}>
+                                            #{i + 1} {im}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    ) : <span className="text-gray-400 text-xs">—</span>}
                                   </td>
                                   <td className="p-3 uppercase font-bold text-[10px] text-purple-600">{item.paymentMethod}</td>
                                 </tr>
@@ -367,8 +375,16 @@ const AdminSalesTracking = () => {
                                         {isMobile ? 'Mobiles' : 'Accessories'}
                                       </span>
                                     </td>
-                                    <td className="p-3 font-mono text-[10px] text-muted-text">
-                                      {item.imeis.length > 0 ? item.imeis.join(', ') : '—'}
+                                    <td className="p-3">
+                                      {item.imeis.length > 0 ? (
+                                        <div className="flex flex-wrap gap-1 max-w-[240px] max-h-16 overflow-y-auto scrollbar-thin">
+                                          {item.imeis.map((im, i) => (
+                                            <span key={i} className="bg-slate-50 border border-slate-200 text-slate-700 font-mono text-[9px] px-1.5 py-0.5 rounded font-semibold" title={im}>
+                                              #{i + 1} {im}
+                                            </span>
+                                          ))}
+                                        </div>
+                                      ) : <span className="text-gray-400 text-xs">—</span>}
                                     </td>
                                   </tr>
                                 );

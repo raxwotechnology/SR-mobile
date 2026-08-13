@@ -85,65 +85,69 @@ const CartPage = () => {
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: 20, height: 0 }}
                     transition={{ delay: i * 0.05, duration: 0.3 }}
-                    className="flex items-center gap-4 p-4 md:p-5 border-b border-card-border last:border-b-0"
+                    className="flex flex-wrap sm:flex-nowrap items-center gap-3 sm:gap-4 p-3.5 sm:p-5 border-b border-card-border last:border-b-0 relative"
                   >
                     {/* Product Image */}
                     <Link to={`/product/${productId}`} className="flex-shrink-0">
                       <img
                         src={getImageUrl(image) || 'https://via.placeholder.com/100'}
                         alt={name}
-                        className="w-20 h-20 md:w-24 md:h-24 rounded-xl object-cover"
+                        className="w-16 h-16 sm:w-24 sm:h-24 rounded-xl object-cover"
                         onError={(e) => handleImageError(e, 'Product')}
                       />
                     </Link>
 
                     {/* Details */}
-                    <div className="flex-1 min-w-0">
-                      <Link to={`/product/${productId}`} className="font-semibold text-dark-navy hover:text-primary-blue transition-colors text-sm md:text-base block truncate">
+                    <div className="flex-1 min-w-[140px]">
+                      <Link to={`/product/${productId}`} className="font-semibold text-dark-navy hover:text-primary-blue transition-colors text-sm sm:text-base block line-clamp-2">
                         {name}
                       </Link>
-                      {unit && <p className="text-xs text-muted-text m-0 mt-1">per {unit}</p>}
+                      {unit && <p className="text-xs text-muted-text m-0 mt-0.5">per {unit}</p>}
                       <div className="flex items-center gap-2 mt-1">
-                        <span className="font-bold text-dark-navy">{formatPrice(convertPrice(price))}</span>
+                        <span className="font-bold text-dark-navy text-sm sm:text-base">{formatPrice(convertPrice(price))}</span>
                         {mrp > price && (
                           <span className="text-xs text-muted-text line-through">{formatPrice(convertPrice(mrp))}</span>
                         )}
                       </div>
                     </div>
 
-                    {/* Quantity */}
-                    <div className="flex items-center border border-card-border rounded-lg overflow-hidden">
+                    {/* Quantity & Actions wrapper */}
+                    <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-start pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100 mt-2 sm:mt-0">
+                      {/* Quantity */}
+                      <div className="flex items-center border border-card-border rounded-lg overflow-hidden">
+                        <button
+                          onClick={() => handleQuantityChange(productId, item.quantity - 1)}
+                          className="w-8 h-8 flex items-center justify-center hover:bg-gray-50 transition-colors"
+                          disabled={item.quantity <= 1}
+                        >
+                          <Minus size={14} />
+                        </button>
+                        <span className="w-10 h-8 flex items-center justify-center border-x border-card-border text-sm font-semibold">
+                          {item.quantity}
+                        </span>
+                        <button
+                          onClick={() => handleQuantityChange(productId, item.quantity + 1)}
+                          className="w-8 h-8 flex items-center justify-center hover:bg-gray-50 transition-colors"
+                          disabled={item.quantity >= stock}
+                        >
+                          <Plus size={14} />
+                        </button>
+                      </div>
+
+                      {/* Line Total (Desktop & Mobile) */}
+                      <div className="text-right min-w-[70px]">
+                        <span className="font-bold text-dark-navy text-sm sm:text-base">{formatPrice(convertPrice(price * item.quantity))}</span>
+                      </div>
+
+                      {/* Remove */}
                       <button
-                        onClick={() => handleQuantityChange(productId, item.quantity - 1)}
-                        className="w-8 h-8 flex items-center justify-center hover:bg-gray-50 transition-colors"
-                        disabled={item.quantity <= 1}
+                        onClick={() => handleRemove(productId, name)}
+                        className="text-muted-text hover:text-red-500 transition-colors p-1.5 rounded-lg hover:bg-red-50"
+                        title="Remove item"
                       >
-                        <Minus size={14} />
-                      </button>
-                      <span className="w-10 h-8 flex items-center justify-center border-x border-card-border text-sm font-semibold">
-                        {item.quantity}
-                      </span>
-                      <button
-                        onClick={() => handleQuantityChange(productId, item.quantity + 1)}
-                        className="w-8 h-8 flex items-center justify-center hover:bg-gray-50 transition-colors"
-                        disabled={item.quantity >= stock}
-                      >
-                        <Plus size={14} />
+                        <Trash2 size={16} />
                       </button>
                     </div>
-
-                    {/* Line Total */}
-                    <div className="hidden md:block text-right min-w-[80px]">
-                      <span className="font-bold text-dark-navy">{formatPrice(convertPrice(price * item.quantity))}</span>
-                    </div>
-
-                    {/* Remove */}
-                    <button
-                      onClick={() => handleRemove(productId, name)}
-                      className="text-muted-text hover:text-red-500 transition-colors p-1"
-                    >
-                      <Trash2 size={18} />
-                    </button>
                   </motion.div>
                 );
               })}

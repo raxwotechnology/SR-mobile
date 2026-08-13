@@ -4,7 +4,8 @@ import DashboardLayout from '../../components/DashboardLayout';
 import { toast } from 'react-toastify';
 import { exportToCSV, exportToExcel, exportToPDF } from '../../utils/exportUtils';
 import { adminNavGroups as navItems } from './adminNavItems';
-import API from '../../services/api';
+import { getAdminProducts, getCategories } from '../../services/api';
+import useAdminStoreStore from '../../store/adminStoreStore';
 
 const AdminInventory = () => {
   const [products, setProducts] = useState([]);
@@ -16,14 +17,19 @@ const AdminInventory = () => {
   const [sortBy, setSortBy] = useState('stock-asc');
   const [categories, setCategories] = useState([]);
 
+  const { selectedStoreId } = useAdminStoreStore();
+
   useEffect(() => {
     const fetchData = async () => {
       try {
+        setLoading(true);
+        const storeParam = selectedStoreId !== 'all' ? selectedStoreId : undefined;
         const [prodRes, catRes] = await Promise.all([
-          API.get('/products'),
-          API.get('/categories'),
+          getAdminProducts({ storeId: storeParam }),
+          getCategories(),
         ]);
-        setProducts(prodRes.data?.products || prodRes.data || []);
+        const prodList = Array.isArray(prodRes.data) ? prodRes.data : (prodRes.data?.products || []);
+        setProducts(prodList);
         setCategories(catRes.data || []);
       } catch (err) {
         toast.error('Failed to load inventory');
@@ -32,13 +38,13 @@ const AdminInventory = () => {
       }
     };
     fetchData();
-  }, []);
+  }, [selectedStoreId]);
 
   const filtered = products
     .filter(p => {
-      const matchSearch = p.name?.toLowerCase().includes(search.toLowerCase()) || p.barcode?.includes(search);
-      const matchCat = catFilter === 'all' || p.category === catFilter || p.categoryId === catFilter || p.categoryId?._id === catFilter;
-      const matchBrand = brandFilter === 'all' || p.brand === brandFilter;
+      const matchSearch = p.name?.toLowerCase().includes(search.toLowerCase()) || p.barcode?.includes(search) || p.sku?.toLowerCase().includes(search.toLowerCase());
+      const matchCat = catFilter === 'all' || p.category === catFilter || p.categoryId === catFilter || p.categoryId?._id === catFilter || p.categoryId?.name === catFilter;
+      const matchBrand = brandFilter === 'all' || p.brand?.toLowerCase() === brandFilter?.toLowerCase();
       
       const safetyLimit = p.lowStockLimit !== undefined && p.lowStockLimit !== null ? p.lowStockLimit : 10;
       const matchStock = stockFilter === 'all'
@@ -57,7 +63,11 @@ const AdminInventory = () => {
     });
 
   // Extract unique brands dynamically
-  const uniqueBrands = ['all', ...new Set(products.map(p => p.brand).filter(Boolean))];
+  const uniqueBrands = ['all', ...new Set(products.map(p => p.brand).filter(Boolean))].sort((a, b) => {
+    if (a === 'all') return -1;
+    if (b === 'all') return 1;
+    return a.localeCompare(b);
+  });
 
   const totalProducts = products.length;
   const outOfStock = products.filter(p => p.stock <= 0).length;

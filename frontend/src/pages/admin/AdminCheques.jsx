@@ -165,7 +165,7 @@ const AdminCheques = () => {
             <p className="text-muted-text text-sm mt-1">Monitor and manage all customer and supplier cheques</p>
           </div>
           <button onClick={() => {
-            setForm({ ...form, storeId: selectedStoreId !== 'all' ? selectedStoreId : '' });
+            setForm({ ...form, storeId: selectedStoreId !== 'all' ? selectedStoreId : (stores[0]?._id || '') });
             setShowModal(true);
           }} className="flex items-center gap-2 bg-primary-blue text-white px-5 py-2.5 rounded-xl font-semibold hover:bg-emerald-600 transition-colors shadow-md">
             <Plus size={16} /> Record Cheque

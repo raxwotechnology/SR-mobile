@@ -8,7 +8,7 @@ const { recordTransaction } = require('../services/ledgerService');
 // @access  Private/Admin/Manager
 const getHPRecords = async (req, res, next) => {
   try {
-    const { status, storeId, search } = req.query;
+    const { status, storeId, search, year, month } = req.query;
     const filter = {};
     
     if (req.user.role === 'manager') {
@@ -20,17 +20,136 @@ const getHPRecords = async (req, res, next) => {
 
     if (status) filter.status = status;
     if (search) {
-      filter.$or = [
-        { 'customer.name': { $regex: search, $options: 'i' } },
-        { 'customer.phone': { $regex: search, $options: 'i' } },
-        { 'customer.nic': { $regex: search, $options: 'i' } }
-      ];
+      // Check if there is an exact match or suffix match for invoice number (case-insensitive) in HirePurchase or Order
+      const isNumOnly = /^\d+$/.test(search);
+      let hasExactInvoice = null;
+      let exactOrderIds = [];
+
+      if (isNumOnly) {
+        const searchNum = Number(search);
+        hasExactInvoice = await HirePurchase.findOne({
+          $or: [
+            { invoiceNumber: { $regex: `^${search}$`, $options: 'i' } },
+            { invoiceNumber: { $regex: `-[0]*${searchNum}$` } }
+          ]
+        });
+
+        if (!hasExactInvoice) {
+          const matchingExactOrders = await Order.find({
+            $or: [
+              { invoiceNumber: { $regex: `^${search}$`, $options: 'i' } },
+              { invoiceNumber: { $regex: `-[0]*${searchNum}$` } }
+            ]
+          }).select('_id');
+          exactOrderIds = matchingExactOrders.map(o => o._id);
+        }
+      } else {
+        hasExactInvoice = await HirePurchase.findOne({
+          invoiceNumber: { $regex: `^${search}$`, $options: 'i' }
+        });
+        if (!hasExactInvoice) {
+          const matchingExactOrders = await Order.find({
+            invoiceNumber: { $regex: `^${search}$`, $options: 'i' }
+          }).select('_id');
+          exactOrderIds = matchingExactOrders.map(o => o._id);
+        }
+      }
+
+      if (hasExactInvoice || exactOrderIds.length > 0) {
+        const searchNum = Number(search);
+        const isNum = !isNaN(searchNum);
+        
+        filter.$or = [
+          { 'invoiceNumber': { $regex: `^${search}$`, $options: 'i' } },
+          ...(isNum ? [
+            { 'invoiceNumber': searchNum },
+            { 'invoiceNumber': { $regex: `-[0]*${searchNum}$` } }
+          ] : []),
+          ...(exactOrderIds.length > 0 ? [{ orderId: { $in: exactOrderIds } }] : [])
+        ];
+      } else {
+        const matchingOrders = await Order.find({ invoiceNumber: { $regex: search, $options: 'i' } }).select('_id');
+        const matchingOrderIds = matchingOrders.map(o => o._id);
+
+        const searchNum = Number(search);
+        const isNum = !isNaN(searchNum);
+
+        // Normalize phone number formats for search (Sri Lanka formats)
+        const cleanPhone = search.replace(/[\s\-()+]/g, '');
+        const basePhone = cleanPhone.replace(/^94/, '').replace(/^0/, '');
+
+        // Normalize NIC formats (remove dashes/spaces)
+        const cleanNIC = search.replace(/[\s\-]/g, '');
+
+        filter.$or = [
+          { 'customer.name': { $regex: search, $options: 'i' } },
+          { 'customer.phone': { $regex: search, $options: 'i' } },
+          { 'customer.nic': { $regex: search, $options: 'i' } },
+          
+          // Cleaned phone/NIC search to handle prefix/spacing differences
+          ...(basePhone ? [{ 'customer.phone': { $regex: basePhone, $options: 'i' } }] : []),
+          ...(cleanNIC ? [{ 'customer.nic': { $regex: cleanNIC, $options: 'i' } }] : []),
+
+          // Guarantor search
+          { 'customer.guarantors.name': { $regex: search, $options: 'i' } },
+          { 'customer.guarantors.phone': { $regex: search, $options: 'i' } },
+          { 'customer.guarantors.nic': { $regex: search, $options: 'i' } },
+
+          // Invoice Number (regex search for string, exact for legacy number fields)
+          { 'invoiceNumber': { $regex: search, $options: 'i' } },
+          ...(isNum ? [{ 'invoiceNumber': searchNum }] : []),
+
+          { orderId: { $in: matchingOrderIds } }
+        ];
+      }
+    }
+
+    if (year && year !== 'all') {
+      const y = parseInt(year);
+      let startDateRange, endDateRange;
+      if (month && month !== 'all') {
+        const m = parseInt(month) - 1;
+        startDateRange = new Date(y, m, 1);
+        endDateRange = new Date(y, m + 1, 0, 23, 59, 59, 999);
+      } else {
+        startDateRange = new Date(y, 0, 1);
+        endDateRange = new Date(y, 11, 31, 23, 59, 59, 999);
+      }
+      const dateFilter = {
+        $or: [
+          { startDate: { $gte: startDateRange, $lte: endDateRange } },
+          { createdAt: { $gte: startDateRange, $lte: endDateRange } }
+        ]
+      };
+      if (filter.$or) {
+        filter.$and = [{ $or: filter.$or }, dateFilter];
+        delete filter.$or;
+      } else {
+        filter.$or = dateFilter.$or;
+      }
+    } else if (month && month !== 'all') {
+      const currentYear = new Date().getFullYear();
+      const m = parseInt(month) - 1;
+      const startDateRange = new Date(currentYear, m, 1);
+      const endDateRange = new Date(currentYear, m + 1, 0, 23, 59, 59, 999);
+      const dateFilter = {
+        $or: [
+          { startDate: { $gte: startDateRange, $lte: endDateRange } },
+          { createdAt: { $gte: startDateRange, $lte: endDateRange } }
+        ]
+      };
+      if (filter.$or) {
+        filter.$and = [{ $or: filter.$or }, dateFilter];
+        delete filter.$or;
+      } else {
+        filter.$or = dateFilter.$or;
+      }
     }
 
     const records = await HirePurchase.find(filter)
       .populate('orderId')
       .populate('createdBy', 'name')
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1, startDate: -1 });
       
     res.json(records);
   } catch (error) { next(error); }
@@ -194,6 +313,69 @@ const getAllCustomers = async (req, res, next) => {
   } catch (error) { next(error); }
 };
 
+// @desc    Update HP record
+// @route   PUT /api/hp/:id
+// @access  Private/Admin/Manager
+const updateHPRecord = async (req, res, next) => {
+  try {
+    const record = await HirePurchase.findById(req.params.id);
+    if (!record) {
+      res.status(404);
+      return next(new Error('HP record not found'));
+    }
+
+    const {
+      customer,
+      installmentType,
+      numberOfInstallments,
+      installmentAmount,
+      nextDueDate,
+      status,
+      notes,
+      totalAmount,
+      interestRate,
+      interestAmount,
+      netTotal,
+      downPayment
+    } = req.body;
+
+    if (customer) {
+      if (customer.name !== undefined) record.customer.name = customer.name;
+      if (customer.phone !== undefined) record.customer.phone = customer.phone;
+      if (customer.nic !== undefined) record.customer.nic = customer.nic;
+      if (customer.address !== undefined) record.customer.address = customer.address;
+      if (customer.guarantors !== undefined) record.customer.guarantors = customer.guarantors;
+    }
+
+    if (installmentType !== undefined) record.installmentType = installmentType;
+    if (numberOfInstallments !== undefined) record.numberOfInstallments = Number(numberOfInstallments);
+    if (installmentAmount !== undefined) record.installmentAmount = Number(installmentAmount);
+    if (nextDueDate !== undefined) record.nextDueDate = nextDueDate ? new Date(nextDueDate) : null;
+    if (status !== undefined) record.status = status;
+    if (notes !== undefined) record.notes = notes;
+
+    if (totalAmount !== undefined) record.totalAmount = Number(totalAmount);
+    if (interestRate !== undefined) record.interestRate = Number(interestRate);
+    if (interestAmount !== undefined) record.interestAmount = Number(interestAmount);
+    if (downPayment !== undefined) record.downPayment = Number(downPayment);
+
+    if (netTotal !== undefined) {
+      record.netTotal = Number(netTotal);
+    } else if (totalAmount !== undefined || interestAmount !== undefined) {
+      record.netTotal = (record.totalAmount || 0) + (record.interestAmount || 0);
+    }
+
+    record.balanceAmount = Math.max(0, (record.netTotal || 0) - (record.totalPaid || 0));
+
+    if (record.balanceAmount <= 0 && record.status === 'Active') {
+      record.status = 'Completed';
+    }
+
+    await record.save();
+    res.json(record);
+  } catch (error) { next(error); }
+};
+
 // @desc    Delete HP record
 // @route   DELETE /api/hp/:id
 // @access  Private/Admin
@@ -212,8 +394,10 @@ const deleteHPRecord = async (req, res, next) => {
 module.exports = {
   getHPRecords,
   getHPById,
+  updateHPRecord,
   recordHPPayment,
   getCustomerHistory,
   getAllCustomers,
   deleteHPRecord
 };
+
