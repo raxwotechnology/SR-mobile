@@ -14,22 +14,22 @@ const { protect, authorize, requirePermission } = require('../middleware/authMid
 router.use(protect);
 
 // Attendance
-router.post('/attendance/check-in', authorize('cashier', 'deliveryGuy', 'stockEmployee', 'manager'), checkIn);
-router.post('/attendance/check-out', authorize('cashier', 'deliveryGuy', 'stockEmployee', 'manager'), checkOut);
+router.post('/attendance/check-in', authorize('cashier', 'deliveryGuy', 'stockEmployee', 'manager', 'admin', 'employee'), checkIn);
+router.post('/attendance/check-out', authorize('cashier', 'deliveryGuy', 'stockEmployee', 'manager', 'admin', 'employee'), checkOut);
 router.get('/attendance', getMyAttendance);
-router.get('/attendance/report', requirePermission('employees'), getAttendanceReport);
-router.post('/attendance/mark', requirePermission('employees'), adminMarkAttendance);
+router.get('/attendance/report', protect, getAttendanceReport);
+router.post('/attendance/mark', protect, adminMarkAttendance);
 
 // Leaves
 router.post('/leaves', requestLeave);
 router.get('/leaves', getMyLeaves);
-router.get('/leaves/store', requirePermission('employees'), getStoreLeaves);
+router.get('/leaves/store', protect, getStoreLeaves);
 router.put('/leaves/:id/approve', requirePermission('employees'), approveLeave);
 router.put('/leaves/:id/reject', requirePermission('employees'), rejectLeave);
-router.post('/leaves/create-for-employee', requirePermission('employees'), adminCreateLeave);
+router.post('/leaves/create-for-employee', protect, adminCreateLeave);
 
 // Employees
-router.get('/employees', requirePermission('employees'), getEmployees);
+router.get('/employees', protect, getEmployees);
 router.post('/employees', requirePermission('employees'), addEmployee);
 router.put('/employees/:id', requirePermission('employees'), updateEmployee);
 router.delete('/employees/:id', requirePermission('employees'), deleteEmployee);

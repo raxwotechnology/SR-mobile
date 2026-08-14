@@ -356,20 +356,14 @@ const rejectLeave = async (req, res, next) => {
 // @access  Private/Manager/Admin
 const getEmployees = async (req, res, next) => {
   try {
-    const roles = ['cashier', 'deliveryGuy', 'stockEmployee'];
-    if (String(req.query.includeManagers || '').toLowerCase() === 'true' || req.user.role === 'manager' || req.user.role === 'admin') {
-      roles.push('manager');
-    }
+    const roles = ['cashier', 'deliveryGuy', 'stockEmployee', 'manager', 'admin', 'employee'];
     const filter = { role: { $in: roles } };
     if (req.query.storeId) filter.assignedStore = req.query.storeId;
-
-    // By user request, managers should see all employees in the system, including themselves and other managers.
-    // So we do not apply any store-specific filtering here.
 
     const employees = await User.find(filter)
       .select('name email phone role assignedStore employeeInfo createdAt')
       .populate('assignedStore', 'name')
-      .sort({ createdAt: -1 });
+      .sort({ name: 1 });
 
     res.json(employees);
   } catch (error) { next(error); }
