@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { protect, requirePermission } = require('../middleware/authMiddleware');
+const { protect, authorize } = require('../middleware/authMiddleware');
 const {
   listSuppliers,
   createSupplier,
@@ -8,7 +8,7 @@ const {
   deleteSupplier,
 } = require('../controllers/supplierController');
 
-router.use(protect, requirePermission('suppliers'));
+router.use(protect, authorize('admin', 'manager'));
 
 router.route('/')
   .get(listSuppliers)

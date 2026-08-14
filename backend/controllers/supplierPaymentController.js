@@ -4,13 +4,12 @@ const Store = require('../models/Store');
 const mongoose = require('mongoose');
 
 const resolveStoreId = async (req) => {
-  if (req.user.role === 'manager') {
-    const store = await Store.findOne({ managerId: req.user._id }).select('_id').lean();
-    return store?._id || null;
+  if (req.user?.assignedStore) {
+    return req.user.assignedStore;
   }
-  // Admin: use query/body storeId, or null (all stores)
-  if (req.user.role === 'admin') {
-    return req.body?.storeId || req.query?.storeId || null;
+  if (req.user?.role === 'manager') {
+    const store = await Store.findOne({ managerId: req.user._id }).select('_id').lean();
+    if (store?._id) return store._id;
   }
   return req.body?.storeId || req.query?.storeId || null;
 };
@@ -22,18 +21,17 @@ const getSupplierSummary = async (req, res, next) => {
   try {
     let storeId = await resolveStoreId(req);
 
-    // For admin, if no store found, still show all suppliers
-    let supplierFilter = {};
+    let supplierFilter = { status: 'active' };
     let paymentMatchFilter = {};
     if (storeId) {
-      supplierFilter = { storeId, status: 'active' };
+      supplierFilter = {
+        $or: [
+          { storeId: storeId },
+          { allStores: true }
+        ],
+        status: 'active'
+      };
       paymentMatchFilter = { storeId: new mongoose.Types.ObjectId(String(storeId)) };
-    } else if (req.user.role === 'admin') {
-      // Show all suppliers regardless of store
-      supplierFilter = { status: 'active' };
-    } else {
-      res.status(400);
-      return next(new Error('storeId is required'));
     }
 
     const suppliers = await Supplier.find(supplierFilter).lean();

@@ -1,16 +1,24 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Wallet, Search, ArrowLeft, CreditCard, TrendingUp, TrendingDown, DollarSign, Calendar, Download, ChevronDown, X, FileText, FileSpreadsheet, Edit2, Trash2, Save, CheckCircle, Clock, AlertTriangle, RefreshCw } from 'lucide-react';
+import { Wallet, Search, ArrowLeft, TrendingUp, DollarSign, Download, X, FileText, FileSpreadsheet, Edit2, Trash2, CheckCircle, Clock, RefreshCw, Plus, Building2 } from 'lucide-react';
 import DashboardLayout from '../../components/DashboardLayout';
 import DeleteConfirmationModal from '../../components/DeleteConfirmationModal';
 import { adminNavGroups as navItems } from './adminNavItems';
-import { getSupplierPaymentSummary, getSupplierLedger, recordSupplierPayment, recordSupplierPurchase, getSupplierPayments, updateSupplierTransaction, deleteSupplierTransaction, updateSupplierChequeStatus } from '../../services/api';
-
+import { managerNavGroups } from '../storeOwner/managerNavItems';
+import {
+  getSupplierPaymentSummary, getSupplierLedger, recordSupplierPayment,
+  recordSupplierPurchase, updateSupplierTransaction, deleteSupplierTransaction,
+  updateSupplierChequeStatus
+} from '../../services/api';
+import useAuthStore from '../../store/authStore';
 import { toast } from 'react-toastify';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
 const AdminSupplierPayments = () => {
+  const { user } = useAuthStore();
+  const currentNavItems = user?.role === 'manager' ? managerNavGroups : navItems;
+
   const [suppliers, setSuppliers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -26,7 +34,7 @@ const AdminSupplierPayments = () => {
   const [supplierToPay, setSupplierToPay] = useState(null);
   const [showPurchaseModal, setShowPurchaseModal] = useState(false);
   const [purchaseForm, setPurchaseForm] = useState({ totalCost: '', amountPaid: '', description: '' });
-  const [editTx, setEditTx] = useState(null); // transaction being edited
+  const [editTx, setEditTx] = useState(null);
   const [editForm, setEditForm] = useState({ amount: '', description: '', date: '' });
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState(null);
@@ -35,7 +43,7 @@ const AdminSupplierPayments = () => {
     try {
       if (!isRefresh) setLoading(true);
       const res = await getSupplierPaymentSummary();
-      setSuppliers(res.data);
+      setSuppliers(res.data || []);
     } catch (err) {
       toast.error('Failed to load supplier payments');
     } finally {
@@ -43,10 +51,8 @@ const AdminSupplierPayments = () => {
     }
   }, []);
 
-  // Fetch on mount
   useEffect(() => { fetchSummary(); }, [fetchSummary]);
 
-  // Auto-refresh when user switches back to this tab
   useEffect(() => {
     const onVisible = () => {
       if (document.visibilityState === 'visible') fetchSummary(true);
@@ -55,7 +61,6 @@ const AdminSupplierPayments = () => {
     return () => document.removeEventListener('visibilitychange', onVisible);
   }, [fetchSummary]);
 
-  // Poll every 30 seconds to catch GRN updates from other pages
   useEffect(() => {
     const timer = setInterval(() => fetchSummary(true), 30000);
     return () => clearInterval(timer);
@@ -129,6 +134,49 @@ const AdminSupplierPayments = () => {
     }
   };
 
+  const handleEditTxSubmit = async (e) => {
+    e.preventDefault();
+    if (!editTx) return;
+    try {
+      await updateSupplierTransaction(editTx._id, {
+        amount: Number(editForm.amount),
+        description: editForm.description,
+        date: editForm.date,
+      });
+      toast.success('Transaction updated');
+      setEditTx(null);
+      if (selectedSupplier) openLedger(selectedSupplier);
+      fetchSummary(true);
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Update failed');
+    }
+  };
+
+  const handleDeleteTx = async () => {
+    if (!itemToDelete) return;
+    try {
+      await deleteSupplierTransaction(itemToDelete._id);
+      toast.success('Transaction deleted');
+      setDeleteModalOpen(false);
+      setItemToDelete(null);
+      if (selectedSupplier) openLedger(selectedSupplier);
+      fetchSummary(true);
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Delete failed');
+    }
+  };
+
+  const handleChequeStatusChange = async (txId, newStatus) => {
+    try {
+      await updateSupplierChequeStatus(txId, { chequeStatus: newStatus });
+      toast.success(`Cheque status updated to ${newStatus}`);
+      if (selectedSupplier) openLedger(selectedSupplier);
+      fetchSummary(true);
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to update cheque status');
+    }
+  };
+
   const exportCSV = () => {
     if (!ledger?.transactions?.length) return;
     const rows = [['Date', 'Type', 'Description', 'Amount', 'Balance']];
@@ -148,562 +196,561 @@ const AdminSupplierPayments = () => {
     a.href = url;
     a.download = `supplier_ledger_${selectedSupplier?.name || 'export'}.csv`;
     a.click();
-    URL.revokeObjectURL(url);
   };
 
-  const handleEditTx = (t) => {
-    setEditTx(t._id);
-    setEditForm({
-      amount: t.amount,
-      description: t.description || '',
-      date: t.date ? new Date(t.date).toISOString().split('T')[0] : '',
+  const exportAllPaymentsExcel = () => {
+    if (!filtered.length) return toast.info('No supplier data to export');
+    const data = filtered.map((s) => ({
+      'Supplier Name': s.name,
+      Contact: s.phone || s.email || '—',
+      'Total Purchased (LKR)': s.totalPurchased || 0,
+      'Total Paid (LKR)': s.totalPaid || 0,
+      'Balance Due (LKR)': s.balanceDue || 0,
+    }));
+    const worksheet = XLSX.utils.json_to_sheet(data);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Supplier Payments');
+    XLSX.writeFile(workbook, `Supplier_Payments_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
+  };
+
+  const exportAllPaymentsPDF = () => {
+    if (!filtered.length) return toast.info('No supplier data to export');
+    const doc = new jsPDF();
+    doc.setFontSize(16);
+    doc.text('Supplier Payments Report', 14, 15);
+    doc.setFontSize(10);
+    doc.text(`Generated on: ${new Date().toLocaleDateString()}`, 14, 22);
+
+    const head = [['Supplier Name', 'Contact', 'Total Purchased', 'Total Paid', 'Balance Due']];
+    const body = filtered.map((s) => [
+      s.name,
+      s.phone || s.email || '—',
+      `LKR ${(s.totalPurchased || 0).toLocaleString()}`,
+      `LKR ${(s.totalPaid || 0).toLocaleString()}`,
+      `LKR ${(s.balanceDue || 0).toLocaleString()}`,
+    ]);
+
+    autoTable(doc, {
+      startY: 28,
+      head,
+      body,
+      theme: 'grid',
+      headStyles: { fillColor: [37, 99, 235] },
     });
-  };
 
-  const handleSaveTx = async () => {
-    try {
-      await updateSupplierTransaction(editTx, { amount: Number(editForm.amount), description: editForm.description, date: editForm.date });
-      toast.success('Transaction updated');
-      setEditTx(null);
-      openLedger(selectedSupplier);
-    } catch (err) {
-      toast.error(err.response?.data?.message || 'Update failed');
-    }
-  };
-
-  const handleDeleteClick = (transaction) => {
-    setItemToDelete(transaction);
-    setDeleteModalOpen(true);
-  };
-
-  const handleDeleteConfirm = async () => {
-    try {
-      await deleteSupplierTransaction(itemToDelete._id);
-      toast.success('Transaction deleted');
-      openLedger(selectedSupplier);
-      fetchSummary(true);
-    } catch (err) {
-      toast.error(err.response?.data?.message || 'Delete failed');
-    }
-  };
-
-  const exportAllPaymentsExcel = async () => {
-    try {
-      const res = await getSupplierPayments();
-      const rows = res.data.map(p => ({
-        Supplier: p.supplierId?.name || 'Unknown',
-        Amount: p.amount.toFixed(2),
-        Date: new Date(p.date).toLocaleDateString(),
-        Status: p.paymentMethod || 'cash',
-        'Payment Method': p.paymentMethod || 'cash'
-      }));
-      const sheet = XLSX.utils.json_to_sheet(rows);
-      const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, sheet, 'Supplier Payments');
-      XLSX.writeFile(workbook, 'supplier_payments.xlsx');
-      toast.success('Excel exported');
-    } catch (e) { toast.error('Export failed'); }
-  };
-
-  const exportAllPaymentsPDF = async () => {
-    try {
-      const res = await getSupplierPayments();
-      const doc = new jsPDF();
-      doc.text('Supplier Payments Report', 14, 15);
-      autoTable(doc, {
-        head: [['Supplier', 'Amount (LKR)', 'Date', 'Payment Method']],
-        body: res.data.map(p => [
-          p.supplierId?.name || 'Unknown',
-          p.amount.toFixed(2),
-          new Date(p.date).toLocaleDateString(),
-          p.paymentMethod || 'cash'
-        ]),
-        startY: 20
-      });
-      doc.save('supplier_payments.pdf');
-      toast.success('PDF exported');
-    } catch (e) { toast.error('Export failed'); }
+    doc.save(`Supplier_Payments_Report_${new Date().toISOString().split('T')[0]}.pdf`);
   };
 
   const filtered = suppliers.filter((s) =>
-    s.name?.toLowerCase().includes(search.toLowerCase())
+    (s.name || '').toLowerCase().includes(search.toLowerCase()) ||
+    (s.phone || '').includes(search) ||
+    (s.email || '').toLowerCase().includes(search.toLowerCase())
   );
 
-  const totalDue = suppliers.reduce((s, sup) => s + (sup.balanceDue || 0), 0);
-  const totalPurchased = suppliers.reduce((s, sup) => s + (sup.totalPurchased || 0), 0);
-  const totalPaid = suppliers.reduce((s, sup) => s + (sup.totalPaid || 0), 0);
+  const totalPurchased = suppliers.reduce((sum, s) => sum + (s.totalPurchased || 0), 0);
+  const totalPaid = suppliers.reduce((sum, s) => sum + (s.totalPaid || 0), 0);
+  const totalDue = suppliers.reduce((sum, s) => sum + (s.balanceDue || 0), 0);
 
   // Ledger View
   if (selectedSupplier) {
     return (
-      <DashboardLayout navItems={navItems} title="Admin Panel">
-        <div>
-          {/* Back Button */}
-          <button onClick={() => { setSelectedSupplier(null); setLedger(null); }}
-            style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'none', border: 'none', color: '#d946a0', fontWeight: 600, fontSize: '0.9rem', cursor: 'pointer', marginBottom: '1rem', padding: 0 }}>
-            <ArrowLeft size={18} /> Back to Suppliers
+      <DashboardLayout navItems={currentNavItems} title={user?.role === 'manager' ? "Manager Dashboard" : "Admin Panel"}>
+        <div className="space-y-6 animate-fade-in">
+          <button
+            onClick={() => { setSelectedSupplier(null); setLedger(null); }}
+            className="flex items-center gap-2 text-primary-blue hover:text-blue-700 font-semibold text-sm transition-colors"
+          >
+            <ArrowLeft size={18} /> Back to Supplier List
           </button>
 
-          {/* Supplier Header */}
-          <div style={{ background: 'linear-gradient(135deg, #fdf2f8 0%, #fce7f3 100%)', borderRadius: '16px', padding: '1.5rem', marginBottom: '1.5rem', border: '1px solid #fbcfe8' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
-              <div>
-                <h2 style={{ margin: '0 0 0.25rem', fontSize: '1.4rem', fontWeight: 800, color: '#1f1f1f' }}>{selectedSupplier.name}</h2>
-                <p style={{ margin: 0, color: '#7b6f69', fontSize: '0.85rem' }}>{selectedSupplier.phone} {selectedSupplier.email && `· ${selectedSupplier.email}`}</p>
+          {/* Supplier Header Card */}
+          <div className="bg-white rounded-2xl border border-card-border p-6 shadow-sm">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-xl bg-indigo-50 text-primary-blue font-bold text-xl flex items-center justify-center border border-indigo-100">
+                  {selectedSupplier.name.charAt(0)}
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-dark-navy">{selectedSupplier.name}</h2>
+                  <p className="text-xs text-muted-text flex items-center gap-2 mt-0.5">
+                    <span>📞 {selectedSupplier.phone || 'No phone'}</span>
+                    {selectedSupplier.email && <span>✉️ {selectedSupplier.email}</span>}
+                  </p>
+                </div>
               </div>
-              <div style={{ display: 'flex', gap: '0.75rem' }}>
-                <button onClick={exportCSV} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.5rem 1rem', borderRadius: '10px', border: '1px solid #eaded6', background: 'white', fontSize: '0.82rem', fontWeight: 600, cursor: 'pointer', color: '#1f1f1f' }}>
+              <div className="flex gap-2 flex-wrap">
+                <button
+                  onClick={() => setShowPurchaseModal(true)}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold px-4 py-2.5 rounded-xl transition-colors shadow-sm text-sm flex items-center gap-1.5"
+                >
+                  <Plus size={16} /> Record Purchase
+                </button>
+                <button
+                  onClick={() => setShowPayModal(true)}
+                  className="bg-primary-blue hover:bg-blue-700 text-white font-semibold px-4 py-2.5 rounded-xl transition-colors shadow-sm text-sm flex items-center gap-1.5"
+                >
+                  <DollarSign size={16} /> Record Payment
+                </button>
+                <button
+                  onClick={exportCSV}
+                  className="border border-card-border hover:bg-gray-50 text-dark-navy font-semibold px-4 py-2.5 rounded-xl transition-colors text-sm flex items-center gap-1.5"
+                >
                   <Download size={16} /> Export CSV
-                </button>
-                <button onClick={() => setShowPurchaseModal(true)} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.5rem 1.25rem', borderRadius: '10px', border: '1px solid #d946a0', background: 'white', color: '#d946a0', fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer' }}>
-                  <TrendingUp size={16} /> Record Purchase
-                </button>
-                <button onClick={() => setShowPayModal(true)} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.5rem 1.25rem', borderRadius: '10px', border: 'none', background: 'linear-gradient(135deg, #d946a0, #c026d3)', color: 'white', fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer', boxShadow: '0 2px 10px rgba(217,70,160,0.3)' }}>
-                  <CreditCard size={16} /> Record Payment
                 </button>
               </div>
             </div>
 
-            {/* Balance Cards */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem', marginTop: '1rem' }}>
-              {[
-                { label: 'Total Purchased', value: ledger?.totalPurchased || 0, color: '#1f1f1f', icon: TrendingUp },
-                { label: 'Total Paid', value: ledger?.totalPaid || 0, color: '#059669', icon: TrendingDown },
-                { label: 'Balance Due', value: ledger?.balanceDue || 0, color: ledger?.balanceDue > 0 ? '#dc2626' : '#059669', icon: Wallet },
-              ].map((c, i) => (
-                <div key={i} style={{ background: 'white', borderRadius: '12px', padding: '1rem', border: '1px solid #eaded6', textAlign: 'center' }}>
-                  <c.icon size={20} style={{ color: c.color, marginBottom: '0.25rem' }} />
-                  <p style={{ margin: '0 0 0.15rem', fontSize: '0.7rem', color: '#7b6f69', textTransform: 'uppercase', fontWeight: 600, letterSpacing: '0.5px' }}>{c.label}</p>
-                  <p style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: c.color }}>LKR {c.value.toLocaleString()}</p>
-                </div>
-              ))}
+            {/* Balances Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-6 pt-6 border-t border-card-border">
+              <div className="bg-gray-50 rounded-xl p-4 border border-card-border">
+                <p className="text-xs text-muted-text font-medium uppercase tracking-wider">Total Purchased</p>
+                <p className="text-xl font-bold text-dark-navy mt-1">LKR {(ledger?.totalPurchased || 0).toLocaleString()}</p>
+              </div>
+              <div className="bg-emerald-50/50 rounded-xl p-4 border border-emerald-100">
+                <p className="text-xs text-emerald-700 font-medium uppercase tracking-wider">Total Paid</p>
+                <p className="text-xl font-bold text-emerald-600 mt-1">LKR {(ledger?.totalPaid || 0).toLocaleString()}</p>
+              </div>
+              <div className={`rounded-xl p-4 border ${ledger?.balanceDue > 0 ? 'bg-red-50/50 border-red-100' : 'bg-emerald-50/50 border-emerald-100'}`}>
+                <p className={`text-xs font-medium uppercase tracking-wider ${ledger?.balanceDue > 0 ? 'text-red-700' : 'text-emerald-700'}`}>Balance Due</p>
+                <p className={`text-xl font-bold mt-1 ${ledger?.balanceDue > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
+                  LKR {(ledger?.balanceDue || 0).toLocaleString()}
+                </p>
+              </div>
             </div>
           </div>
 
-          {/* Transactions Table */}
-          <div style={{ background: 'white', borderRadius: '16px', border: '1px solid #eaded6', overflow: 'hidden' }}>
-            <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid #eaded6' }}>
-              <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: '#1f1f1f' }}>Transaction Ledger</h3>
+          {/* Transactions Ledger Table */}
+          <div className="bg-white rounded-2xl border border-card-border shadow-sm overflow-hidden">
+            <div className="px-6 py-4 border-b border-card-border flex items-center justify-between">
+              <h3 className="font-bold text-dark-navy text-base">Transaction Ledger History</h3>
+              {ledgerLoading && <span className="text-xs text-muted-text animate-pulse">Loading ledger...</span>}
             </div>
+
             {ledgerLoading ? (
-              <div style={{ padding: '3rem', textAlign: 'center', color: '#7b6f69' }}>Loading...</div>
+              <div className="p-12 text-center text-muted-text">Loading transaction records...</div>
             ) : !ledger?.transactions?.length ? (
-              <div style={{ padding: '3rem', textAlign: 'center', color: '#7b6f69' }}>No transactions yet</div>
+              <div className="p-12 text-center text-muted-text">No transaction history found for this supplier</div>
             ) : (
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
                   <thead>
-                    <tr style={{ background: '#fdf2f8' }}>
-                      {['Date', 'Type', 'Description', 'By', 'Amount', 'Balance', 'Actions'].map((h) => (
-                        <th key={h} style={{ padding: '0.75rem 1rem', textAlign: 'left', fontWeight: 700, color: '#7b6f69', fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{h}</th>
-                      ))}
+                    <tr className="bg-gray-50/80 border-b border-card-border text-left text-xs font-semibold text-muted-text uppercase tracking-wider">
+                      <th className="px-6 py-3.5">Date</th>
+                      <th className="px-6 py-3.5">Type</th>
+                      <th className="px-6 py-3.5">Description</th>
+                      <th className="px-6 py-3.5 text-right">Amount (LKR)</th>
+                      <th className="px-6 py-3.5 text-right">Balance Due</th>
+                      <th className="px-6 py-3.5 text-right">Actions</th>
                     </tr>
                   </thead>
-                  <tbody>
-                    {ledger.transactions.map((t, i) => (
-                      <tr key={i} style={{ borderBottom: '1px solid #f5f0ec', background: editTx === t._id ? '#fff9f5' : 'white' }}>
-                        <td style={{ padding: '0.7rem 1rem', color: '#1f1f1f', minWidth: '100px' }}>
-                          {editTx === t._id
-                            ? <input type="date" value={editForm.date} onChange={e => setEditForm({ ...editForm, date: e.target.value })} style={{ border: '1px solid #eaded6', borderRadius: '6px', padding: '3px 6px', fontSize: '0.8rem', width: '120px' }} />
-                            : new Date(t.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
-                        </td>
-                        <td style={{ padding: '0.7rem 1rem' }}>
-                          <span style={{ padding: '2px 10px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 700, background: t.type === 'purchase' ? '#fef3c7' : '#d1fae5', color: t.type === 'purchase' ? '#92400e' : '#065f46' }}>
-                            {t.type === 'purchase' ? 'PURCHASE' : 'PAYMENT'}
-                          </span>
-                        </td>
-                        <td style={{ padding: '0.7rem 1rem', color: '#7b6f69', maxWidth: '200px' }}>
-                          {editTx === t._id
-                            ? <input value={editForm.description} onChange={e => setEditForm({ ...editForm, description: e.target.value })} style={{ border: '1px solid #eaded6', borderRadius: '6px', padding: '3px 8px', fontSize: '0.82rem', width: '100%' }} />
-                            : <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>{t.description}</span>}
-                        </td>
-                        <td style={{ padding: '0.7rem 1rem', color: '#7b6f69' }}>{t.createdBy?.name || '—'}</td>
-                        <td style={{ padding: '0.7rem 1rem', fontWeight: 700, color: t.type === 'purchase' ? '#dc2626' : '#059669', minWidth: '110px' }}>
-                          {editTx === t._id
-                            ? <input type="number" value={editForm.amount} onChange={e => setEditForm({ ...editForm, amount: e.target.value })} style={{ border: '1px solid #eaded6', borderRadius: '6px', padding: '3px 6px', fontSize: '0.85rem', width: '90px', fontWeight: 700 }} />
-                            : <>{t.type === 'purchase' ? '+' : '-'} LKR {t.amount.toLocaleString()}</>}
-                        </td>
-                        <td style={{ padding: '0.7rem 1rem', fontWeight: 700, color: t.runningBalance > 0 ? '#dc2626' : '#059669' }}>
-                          LKR {t.runningBalance.toLocaleString()}
-                        </td>
-                        <td style={{ padding: '0.7rem 1rem' }}>
-                          {editTx === t._id ? (
-                            <div style={{ display: 'flex', gap: '0.4rem' }}>
-                              <button onClick={handleSaveTx} style={{ background: '#059669', color: 'white', border: 'none', borderRadius: '6px', padding: '4px 10px', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer' }}>Save</button>
-                              <button onClick={() => setEditTx(null)} style={{ background: '#f5f0ec', color: '#7b6f69', border: 'none', borderRadius: '6px', padding: '4px 10px', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
-                            </div>
-                          ) : (
-                            <div style={{ display: 'flex', gap: '0.4rem' }}>
-                              <button onClick={() => handleEditTx(t)} title="Edit" style={{ background: '#eff6ff', color: '#2563eb', border: 'none', borderRadius: '6px', padding: '4px 8px', cursor: 'pointer' }}>
-                                <Edit2 size={13} />
+                  <tbody className="divide-y divide-card-border">
+                    {ledger.transactions.map((t) => {
+                      const isPurchase = t.type === 'purchase';
+                      return (
+                        <tr key={t._id} className="hover:bg-gray-50/60 transition-colors">
+                          <td className="px-6 py-4 text-xs font-medium text-dark-navy">
+                            {new Date(t.date).toLocaleDateString()}
+                          </td>
+                          <td className="px-6 py-4">
+                            <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full uppercase ${isPurchase ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                              {t.type}
+                            </span>
+                            {t.paymentMethod === 'cheque' && (
+                              <span className="ml-2 text-[10px] font-bold bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">
+                                Cheque #{t.chequeNumber || ''} ({t.chequeStatus || 'pending'})
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-6 py-4 text-xs text-muted-text">
+                            {t.description || (isPurchase ? 'Stock Purchase' : 'Supplier Payment')}
+                          </td>
+                          <td className={`px-6 py-4 text-right font-bold text-xs ${isPurchase ? 'text-dark-navy' : 'text-emerald-600'}`}>
+                            {isPurchase ? '+' : '-'} LKR {t.amount.toLocaleString()}
+                          </td>
+                          <td className="px-6 py-4 text-right font-bold text-xs text-slate-700">
+                            LKR {t.runningBalance.toLocaleString()}
+                          </td>
+                          <td className="px-6 py-4 text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              <button
+                                onClick={() => {
+                                  setEditTx(t);
+                                  setEditForm({
+                                    amount: t.amount,
+                                    description: t.description || '',
+                                    date: new Date(t.date).toISOString().split('T')[0],
+                                  });
+                                }}
+                                className="p-1.5 rounded-lg hover:bg-gray-100 text-muted-text hover:text-primary-blue transition-colors"
+                              >
+                                <Edit2 size={15} />
                               </button>
-                              <button onClick={() => handleDeleteClick(t)} title="Delete" style={{ background: '#fef2f2', color: '#dc2626', border: 'none', borderRadius: '6px', padding: '4px 8px', cursor: 'pointer' }}>
-                                <Trash2 size={13} />
+                              <button
+                                onClick={() => {
+                                  setItemToDelete(t);
+                                  setDeleteModalOpen(true);
+                                }}
+                                className="p-1.5 rounded-lg hover:bg-red-50 text-muted-text hover:text-red-600 transition-colors"
+                              >
+                                <Trash2 size={15} />
                               </button>
                             </div>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
             )}
           </div>
-
-          {/* Cheque Tracking Section */}
-          {ledger?.chequeSummary && ledger.chequeSummary.totalCheques > 0 && (
-            <div style={{ background: 'white', borderRadius: '16px', border: '1px solid #eaded6', overflow: 'hidden', marginTop: '1.5rem' }}>
-              <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid #eaded6', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
-                <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: '#1f1f1f' }}>🏦 Cheque Tracking</h3>
-                <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
-                  <span style={{ padding: '4px 12px', borderRadius: '8px', fontSize: '0.75rem', fontWeight: 700, background: '#d1fae5', color: '#065f46' }}>✅ Paid: {ledger.chequeSummary.paid}</span>
-                  <span style={{ padding: '4px 12px', borderRadius: '8px', fontSize: '0.75rem', fontWeight: 700, background: '#fef3c7', color: '#92400e' }}>⏳ Pending: {ledger.chequeSummary.pending}</span>
-                  <span style={{ padding: '4px 12px', borderRadius: '8px', fontSize: '0.75rem', fontWeight: 700, background: '#fef2f2', color: '#991b1b' }}>❌ Bounced: {ledger.chequeSummary.bounced}</span>
-                </div>
-              </div>
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
-                  <thead>
-                    <tr style={{ background: '#fdf2f8' }}>
-                      {['Cheque No', 'Bank', 'Cheque Date', 'Amount', 'Account', 'Status', 'Action'].map((h) => (
-                        <th key={h} style={{ padding: '0.75rem 1rem', textAlign: 'left', fontWeight: 700, color: '#7b6f69', fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(ledger.chequeSummary.cheques || []).map((ch, ci) => (
-                      <tr key={ci} style={{ borderBottom: '1px solid #f5f0ec' }}>
-                        <td style={{ padding: '0.7rem 1rem', fontWeight: 600, color: '#1f1f1f' }}>{ch.chequeNumber}</td>
-                        <td style={{ padding: '0.7rem 1rem', color: '#7b6f69' }}>{ch.bankName}</td>
-                        <td style={{ padding: '0.7rem 1rem', color: '#7b6f69' }}>{ch.chequeDate ? new Date(ch.chequeDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}</td>
-                        <td style={{ padding: '0.7rem 1rem', fontWeight: 700, color: '#d946a0' }}>LKR {Number(ch.amount || 0).toLocaleString()}</td>
-                        <td style={{ padding: '0.7rem 1rem', color: '#7b6f69' }}>{ch.accountNumber || '—'}</td>
-                        <td style={{ padding: '0.7rem 1rem' }}>
-                          <span style={{ padding: '3px 10px', borderRadius: '8px', fontWeight: 700, fontSize: '0.72rem', background: ch.status === 'paid' ? '#d1fae5' : ch.status === 'bounced' ? '#fef2f2' : '#fef3c7', color: ch.status === 'paid' ? '#065f46' : ch.status === 'bounced' ? '#991b1b' : '#92400e' }}>
-                            {ch.status === 'paid' ? '✅ Paid' : ch.status === 'bounced' ? '❌ Bounced' : '⏳ Pending'}
-                          </span>
-                        </td>
-                        <td style={{ padding: '0.7rem 1rem' }}>
-                          <select
-                            value={ch.status}
-                            onChange={async (e) => {
-                              try {
-                                await updateSupplierChequeStatus(ch.paymentId, { chequeStatus: e.target.value, status: e.target.value });
-
-                                toast.success('Cheque status updated');
-                                openLedger(selectedSupplier);
-                              } catch { toast.error('Failed to update cheque status'); }
-                            }}
-                            style={{ padding: '4px 8px', borderRadius: '6px', border: '1px solid #eaded6', fontSize: '0.78rem', cursor: 'pointer' }}
-                          >
-                            <option value="pending">Pending</option>
-                            <option value="paid">Paid</option>
-                            <option value="bounced">Bounced</option>
-                          </select>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
         </div>
 
-        {/* Payment Modal */}
-        {showPayModal && (
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem' }}>
-            <div style={{ background: 'white', borderRadius: '20px', width: '100%', maxWidth: '420px', padding: '1.5rem' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
-                <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700 }}>Record Payment</h3>
-                <button onClick={() => setShowPayModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#7b6f69' }}><X size={20} /></button>
+        {/* Edit Transaction Modal */}
+        {editTx && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl border border-card-border">
+              <div className="flex items-center justify-between mb-4 border-b border-card-border pb-3">
+                <h3 className="text-lg font-bold text-dark-navy">Edit Transaction</h3>
+                <button onClick={() => setEditTx(null)} className="p-1 text-gray-400 hover:text-gray-600">
+                  <X size={18} />
+                </button>
               </div>
-              <p style={{ margin: '0 0 1rem', fontSize: '0.85rem', color: '#7b6f69' }}>
-                Payment to <strong>{selectedSupplier.name}</strong> · Balance: <strong style={{ color: '#dc2626' }}>LKR {(ledger?.balanceDue || 0).toLocaleString()}</strong>
-              </p>
-              <div style={{ marginBottom: '1rem' }}>
-                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: '#7b6f69', marginBottom: '0.35rem', textTransform: 'uppercase' }}>Amount (LKR)</label>
-                <input type="number" value={payAmount} onChange={(e) => setPayAmount(e.target.value)} placeholder="0.00"
-                  style={{ width: '100%', padding: '0.7rem 1rem', borderRadius: '10px', border: '1px solid #eaded6', fontSize: '1.1rem', fontWeight: 700, outline: 'none', boxSizing: 'border-box' }} />
-              </div>
-              <div style={{ marginBottom: '1rem' }}>
-                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: '#7b6f69', marginBottom: '0.35rem', textTransform: 'uppercase' }}>Payment Method</label>
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                  {['cash', 'bank_transfer', 'cheque'].map((m) => (
-                    <button key={m} onClick={() => setPayMethod(m)}
-                      style={{ flex: 1, padding: '0.5rem', borderRadius: '8px', border: `1px solid ${payMethod === m ? '#d946a0' : '#eaded6'}`, background: payMethod === m ? '#fdf2f8' : 'white', color: payMethod === m ? '#d946a0' : '#7b6f69', fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer', textTransform: 'capitalize' }}>
-                      {m.replace('_', ' ')}
-                    </button>
-                  ))}
+              <form onSubmit={handleEditTxSubmit} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold text-muted-text uppercase mb-1">Amount (LKR)</label>
+                  <input
+                    type="number"
+                    value={editForm.amount}
+                    onChange={(e) => setEditForm({ ...editForm, amount: e.target.value })}
+                    className="w-full border border-card-border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-primary-blue"
+                    required
+                  />
                 </div>
-              </div>
-              
-              {payMethod === 'cheque' && (
-                <div style={{ background: '#fdf2f8', padding: '1rem', borderRadius: '12px', marginBottom: '1rem', border: '1px solid #fbcfe8' }}>
-                  <h4 style={{ margin: '0 0 0.75rem', fontSize: '0.85rem', color: '#d946a0' }}>Cheque Details</h4>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
-                    <div>
-                      <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 600, color: '#7b6f69', marginBottom: '0.25rem', textTransform: 'uppercase' }}>Cheque No. *</label>
-                      <input type="text" value={chequeDetails.chequeNumber} onChange={(e) => setChequeDetails({...chequeDetails, chequeNumber: e.target.value})} placeholder="0000123"
-                        style={{ width: '100%', padding: '0.5rem', borderRadius: '8px', border: '1px solid #eaded6', fontSize: '0.85rem', outline: 'none' }} />
-                    </div>
-                    <div>
-                      <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 600, color: '#7b6f69', marginBottom: '0.25rem', textTransform: 'uppercase' }}>Bank Name *</label>
-                      <input type="text" value={chequeDetails.bankName} onChange={(e) => setChequeDetails({...chequeDetails, bankName: e.target.value})} placeholder="BOC"
-                        style={{ width: '100%', padding: '0.5rem', borderRadius: '8px', border: '1px solid #eaded6', fontSize: '0.85rem', outline: 'none' }} />
-                    </div>
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-                    <div>
-                      <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 600, color: '#7b6f69', marginBottom: '0.25rem', textTransform: 'uppercase' }}>Cheque Date *</label>
-                      <input type="date" value={chequeDetails.chequeDate} onChange={(e) => setChequeDetails({...chequeDetails, chequeDate: e.target.value})}
-                        style={{ width: '100%', padding: '0.5rem', borderRadius: '8px', border: '1px solid #eaded6', fontSize: '0.85rem', outline: 'none' }} />
-                    </div>
-                    <div>
-                      <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 600, color: '#7b6f69', marginBottom: '0.25rem', textTransform: 'uppercase' }}>Account No.</label>
-                      <input type="text" value={chequeDetails.accountNumber} onChange={(e) => setChequeDetails({...chequeDetails, accountNumber: e.target.value})} placeholder="Optional"
-                        style={{ width: '100%', padding: '0.5rem', borderRadius: '8px', border: '1px solid #eaded6', fontSize: '0.85rem', outline: 'none' }} />
-                    </div>
-                  </div>
+                <div>
+                  <label className="block text-xs font-semibold text-muted-text uppercase mb-1">Date</label>
+                  <input
+                    type="date"
+                    value={editForm.date}
+                    onChange={(e) => setEditForm({ ...editForm, date: e.target.value })}
+                    className="w-full border border-card-border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-primary-blue"
+                    required
+                  />
                 </div>
-              )}
-
-              <div style={{ marginBottom: '1.25rem' }}>
-                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: '#7b6f69', marginBottom: '0.35rem', textTransform: 'uppercase' }}>Note (optional)</label>
-                <input type="text" value={payDescription} onChange={(e) => setPayDescription(e.target.value)} placeholder="Payment reference..."
-                  style={{ width: '100%', padding: '0.6rem 1rem', borderRadius: '10px', border: '1px solid #eaded6', fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box' }} />
-              </div>
-              <button onClick={handlePayment} disabled={paying}
-                style={{ width: '100%', padding: '0.75rem', borderRadius: '12px', border: 'none', background: 'linear-gradient(135deg, #d946a0, #c026d3)', color: 'white', fontSize: '0.95rem', fontWeight: 700, cursor: 'pointer', opacity: paying ? 0.7 : 1 }}>
-                {paying ? 'Processing...' : `Pay LKR ${Number(payAmount || 0).toLocaleString()}`}
-              </button>
+                <div>
+                  <label className="block text-xs font-semibold text-muted-text uppercase mb-1">Description</label>
+                  <input
+                    type="text"
+                    value={editForm.description}
+                    onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                    className="w-full border border-card-border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-primary-blue"
+                  />
+                </div>
+                <div className="flex justify-end gap-2 pt-2">
+                  <button type="button" onClick={() => setEditTx(null)} className="px-4 py-2 text-sm text-muted-text hover:bg-gray-100 rounded-xl">
+                    Cancel
+                  </button>
+                  <button type="submit" className="px-4 py-2 text-sm bg-primary-blue text-white font-semibold rounded-xl hover:bg-blue-700">
+                    Save Changes
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
         )}
 
-        {/* Purchase Modal */}
-        {showPurchaseModal && (
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem' }}>
-            <div style={{ background: 'white', borderRadius: '20px', width: '100%', maxWidth: '420px', padding: '1.5rem' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
-                <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700 }}>Record Purchase</h3>
-                <button onClick={() => setShowPurchaseModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#7b6f69' }}><X size={20} /></button>
-              </div>
-              <p style={{ margin: '0 0 0.5rem', fontSize: '0.85rem', color: '#7b6f69' }}>
-                Stock purchase from <strong>{selectedSupplier.name}</strong>
-              </p>
-              <p style={{ margin: '0 0 1rem', fontSize: '0.78rem', color: '#7b6f69', background: '#fdf2f8', padding: '0.6rem', borderRadius: '8px' }}>
-                💡 Enter the total cost. If you pay partially now, the rest is tracked as balance due.
-              </p>
-              <div style={{ marginBottom: '1rem' }}>
-                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: '#7b6f69', marginBottom: '0.35rem', textTransform: 'uppercase' }}>Total Purchase Cost (LKR) *</label>
-                <input type="number" value={purchaseForm.totalCost} onChange={(e) => setPurchaseForm({...purchaseForm, totalCost: e.target.value})} placeholder="e.g. 10000"
-                  style={{ width: '100%', padding: '0.7rem 1rem', borderRadius: '10px', border: '1px solid #eaded6', fontSize: '1.1rem', fontWeight: 700, outline: 'none', boxSizing: 'border-box' }} />
-              </div>
-              <div style={{ marginBottom: '1rem' }}>
-                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: '#7b6f69', marginBottom: '0.35rem', textTransform: 'uppercase' }}>Amount Paid Now (LKR)</label>
-                <input type="number" value={purchaseForm.amountPaid} onChange={(e) => setPurchaseForm({...purchaseForm, amountPaid: e.target.value})} placeholder="e.g. 5000 (optional)"
-                  style={{ width: '100%', padding: '0.7rem 1rem', borderRadius: '10px', border: '1px solid #eaded6', fontSize: '0.9rem', outline: 'none', boxSizing: 'border-box' }} />
-              </div>
-              {purchaseForm.totalCost && (
-                <div style={{ background: '#fef2f2', padding: '0.6rem 1rem', borderRadius: '8px', marginBottom: '1rem', fontSize: '0.85rem' }}>
-                  <strong style={{ color: '#dc2626' }}>Balance to track: LKR {(Number(purchaseForm.totalCost || 0) - Number(purchaseForm.amountPaid || 0)).toLocaleString()}</strong>
-                </div>
-              )}
-              <div style={{ marginBottom: '1.25rem' }}>
-                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: '#7b6f69', marginBottom: '0.35rem', textTransform: 'uppercase' }}>Description (optional)</label>
-                <input type="text" value={purchaseForm.description} onChange={(e) => setPurchaseForm({...purchaseForm, description: e.target.value})} placeholder="Stock batch, items..."
-                  style={{ width: '100%', padding: '0.6rem 1rem', borderRadius: '10px', border: '1px solid #eaded6', fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box' }} />
-              </div>
-              <button onClick={handlePurchase} disabled={paying}
-                style={{ width: '100%', padding: '0.75rem', borderRadius: '12px', border: 'none', background: 'linear-gradient(135deg, #d946a0, #c026d3)', color: 'white', fontSize: '0.95rem', fontWeight: 700, cursor: 'pointer', opacity: paying ? 0.7 : 1 }}>
-                {paying ? 'Processing...' : 'Record Purchase'}
-              </button>
-            </div>
-          </div>
-        )}
+        <DeleteConfirmationModal
+          isOpen={deleteModalOpen}
+          onClose={() => setDeleteModalOpen(false)}
+          onConfirm={handleDeleteTx}
+          title="Delete Transaction"
+          message="Are you sure you want to delete this transaction? Ledger balances will be recalculated automatically."
+        />
       </DashboardLayout>
     );
   }
 
   // Summary View
   return (
-    <DashboardLayout navItems={navItems} title="Admin Panel">
-      <div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
+    <DashboardLayout navItems={currentNavItems} title={user?.role === 'manager' ? "Manager Dashboard" : "Admin Panel"}>
+      <div className="space-y-6 animate-fade-in">
+        {/* Header Controls */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 style={{ margin: '0 0 0.25rem', fontSize: '1.5rem', fontWeight: 800, color: '#1f1f1f' }}>Supplier Payments</h1>
-            <p style={{ margin: 0, color: '#7b6f69', fontSize: '0.85rem' }}>Track supplier balances, purchases, and payments</p>
+            <h1 className="text-2xl font-bold text-dark-navy flex items-center gap-2">
+              <Wallet className="text-primary-blue" /> Supplier Payments
+            </h1>
+            <p className="text-muted-text text-sm mt-0.5">Track supplier balances, purchases, and payment transactions</p>
           </div>
           <button
             onClick={() => fetchSummary(true)}
             disabled={loading}
-            style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.6rem 1.2rem', borderRadius: '12px', border: '1px solid #eaded6', background: 'white', color: '#1f1f1f', fontWeight: 600, fontSize: '0.85rem', cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.6 : 1 }}
+            className="flex items-center gap-2 px-4 py-2.5 bg-white border border-card-border hover:bg-gray-50 text-dark-navy font-semibold text-sm rounded-xl transition-colors shadow-sm self-start sm:self-auto disabled:opacity-60"
           >
-            <RefreshCw size={16} style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }} />
+            <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
             {loading ? 'Refreshing...' : 'Refresh'}
           </button>
         </div>
 
         {/* Summary Cards */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
-          {[
-            { label: 'Total Purchased', value: totalPurchased, color: '#1f1f1f', bg: '#f5f0ec', icon: TrendingUp },
-            { label: 'Total Paid', value: totalPaid, color: '#059669', bg: '#d1fae5', icon: DollarSign },
-            { label: 'Total Due', value: totalDue, color: totalDue > 0 ? '#dc2626' : '#059669', bg: totalDue > 0 ? '#fef2f2' : '#d1fae5', icon: Wallet },
-          ].map((c, i) => (
-            <div key={i} style={{ background: 'white', borderRadius: '16px', padding: '1.25rem', border: '1px solid #eaded6' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: c.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <c.icon size={18} style={{ color: c.color }} />
-                </div>
-                <span style={{ fontSize: '0.72rem', color: '#7b6f69', textTransform: 'uppercase', fontWeight: 600, letterSpacing: '0.5px' }}>{c.label}</span>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="bg-white rounded-2xl border border-card-border p-5 shadow-sm">
+            <div className="flex items-center gap-2.5 mb-2">
+              <div className="w-9 h-9 rounded-xl bg-indigo-50 text-primary-blue flex items-center justify-center">
+                <TrendingUp size={18} />
               </div>
-              <p style={{ margin: 0, fontSize: '1.3rem', fontWeight: 800, color: c.color }}>LKR {c.value.toLocaleString()}</p>
+              <span className="text-xs font-semibold text-muted-text uppercase tracking-wider">Total Purchased</span>
             </div>
-          ))}
+            <p className="text-2xl font-bold text-dark-navy">LKR {totalPurchased.toLocaleString()}</p>
+          </div>
+
+          <div className="bg-white rounded-2xl border border-card-border p-5 shadow-sm">
+            <div className="flex items-center gap-2.5 mb-2">
+              <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                <DollarSign size={18} />
+              </div>
+              <span className="text-xs font-semibold text-emerald-700 uppercase tracking-wider">Total Paid</span>
+            </div>
+            <p className="text-2xl font-bold text-emerald-600">LKR {totalPaid.toLocaleString()}</p>
+          </div>
+
+          <div className="bg-white rounded-2xl border border-card-border p-5 shadow-sm">
+            <div className="flex items-center gap-2.5 mb-2">
+              <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${totalDue > 0 ? 'bg-red-50 text-red-600' : 'bg-emerald-50 text-emerald-600'}`}>
+                <Wallet size={18} />
+              </div>
+              <span className={`text-xs font-semibold uppercase tracking-wider ${totalDue > 0 ? 'text-red-700' : 'text-emerald-700'}`}>Total Due</span>
+            </div>
+            <p className={`text-2xl font-bold ${totalDue > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
+              LKR {totalDue.toLocaleString()}
+            </p>
+          </div>
         </div>
 
-        {/* Search & Export */}
-        <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
-          <div style={{ position: 'relative', flex: 1, minWidth: '200px' }}>
-            <Search size={18} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: '#7b6f69' }} />
-            <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search suppliers..."
-              style={{ width: '100%', padding: '0.7rem 1rem 0.7rem 2.75rem', borderRadius: '12px', border: '1px solid #eaded6', fontSize: '0.9rem', outline: 'none', boxSizing: 'border-box' }} />
+        {/* Search & Actions */}
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="relative flex-1">
+            <Search size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search suppliers by name, phone, or email..."
+              className="w-full border border-card-border rounded-xl py-2.5 pl-10 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-primary-blue bg-white shadow-sm"
+            />
           </div>
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
-            <button onClick={exportAllPaymentsExcel} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', background: '#059669', color: 'white', padding: '0.7rem 1rem', borderRadius: '12px', border: 'none', fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer' }}>
-              <FileSpreadsheet size={16} /> Export Payments (Excel)
+          <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+            <button
+              onClick={exportAllPaymentsExcel}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm px-4 py-2.5 rounded-xl transition-colors shadow-sm flex items-center gap-1.5"
+            >
+              <FileSpreadsheet size={16} /> Export Excel
             </button>
-            <button onClick={exportAllPaymentsPDF} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', background: '#dc2626', color: 'white', padding: '0.7rem 1rem', borderRadius: '12px', border: 'none', fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer' }}>
-              <FileText size={16} /> Export Payments (PDF)
+            <button
+              onClick={exportAllPaymentsPDF}
+              className="bg-red-600 hover:bg-red-700 text-white font-semibold text-sm px-4 py-2.5 rounded-xl transition-colors shadow-sm flex items-center gap-1.5"
+            >
+              <FileText size={16} /> Export PDF
             </button>
           </div>
         </div>
 
-        {/* Supplier Table */}
-        <div style={{ background: 'white', borderRadius: '16px', border: '1px solid #eaded6', overflow: 'hidden' }}>
+        {/* Suppliers Table */}
+        <div className="bg-white rounded-2xl border border-card-border shadow-sm overflow-hidden">
           {loading ? (
-            <div style={{ padding: '3rem', textAlign: 'center', color: '#7b6f69' }}>Loading suppliers...</div>
+            <div className="p-12 text-center text-muted-text text-sm">Loading suppliers...</div>
           ) : !filtered.length ? (
-            <div style={{ padding: '3rem', textAlign: 'center', color: '#7b6f69' }}>No suppliers found</div>
+            <div className="p-12 text-center text-muted-text text-sm">No suppliers found matching criteria</div>
           ) : (
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
                 <thead>
-                  <tr style={{ background: '#fdf2f8' }}>
-                    {['Supplier', 'Contact', 'Total Purchased', 'Total Paid', 'Balance Due', 'Actions'].map((h) => (
-                      <th key={h} style={{ padding: '0.75rem 1rem', textAlign: 'left', fontWeight: 700, color: '#7b6f69', fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{h}</th>
-                    ))}
+                  <tr className="bg-gray-50/80 border-b border-card-border text-left text-xs font-semibold text-muted-text uppercase tracking-wider">
+                    <th className="px-6 py-3.5">Supplier</th>
+                    <th className="px-6 py-3.5">Contact</th>
+                    <th className="px-6 py-3.5 text-right">Total Purchased</th>
+                    <th className="px-6 py-3.5 text-right">Total Paid</th>
+                    <th className="px-6 py-3.5 text-right">Balance Due</th>
+                    <th className="px-6 py-3.5 text-right">Actions</th>
                   </tr>
                 </thead>
-                <tbody>
-                  {filtered.map((s) => (
-                    <tr key={s._id} style={{ borderBottom: '1px solid #f5f0ec', cursor: 'pointer' }} onClick={() => openLedger(s)}>
-                      <td style={{ padding: '0.75rem 1rem' }}>
-                        <span style={{ fontWeight: 700, color: '#1f1f1f' }}>{s.name}</span>
-                      </td>
-                      <td style={{ padding: '0.75rem 1rem', color: '#7b6f69' }}>{s.phone || s.email || '—'}</td>
-                      <td style={{ padding: '0.75rem 1rem', fontWeight: 600, color: '#1f1f1f' }}>LKR {(s.totalPurchased || 0).toLocaleString()}</td>
-                      <td style={{ padding: '0.75rem 1rem', fontWeight: 600, color: '#059669' }}>LKR {(s.totalPaid || 0).toLocaleString()}</td>
-                      <td style={{ padding: '0.75rem 1rem' }}>
-                        <span style={{ padding: '3px 10px', borderRadius: '8px', fontWeight: 700, fontSize: '0.82rem', background: s.balanceDue > 0 ? '#fef2f2' : '#d1fae5', color: s.balanceDue > 0 ? '#dc2626' : '#059669' }}>
-                          LKR {(s.balanceDue || 0).toLocaleString()}
-                        </span>
-                      </td>
-                      <td style={{ padding: '0.75rem 1rem' }}>
-                        <button onClick={(e) => { e.stopPropagation(); setSupplierToPay(s); setShowPayModal(true); }}
-                          style={{ padding: '0.35rem 0.75rem', borderRadius: '8px', border: 'none', background: '#fdf2f8', color: '#d946a0', fontWeight: 600, fontSize: '0.78rem', cursor: 'pointer' }}>
-                          Pay
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                <tbody className="divide-y divide-card-border">
+                  {filtered.map((s) => {
+                    const hasDue = (s.balanceDue || 0) > 0;
+                    return (
+                      <tr
+                        key={s._id}
+                        onClick={() => openLedger(s)}
+                        className="hover:bg-gray-50/60 transition-colors cursor-pointer"
+                      >
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-3">
+                            <div className="w-9 h-9 rounded-xl bg-blue-50 text-primary-blue font-bold text-sm flex items-center justify-center border border-blue-100 uppercase">
+                              {s.name?.substring(0, 2)}
+                            </div>
+                            <span className="font-semibold text-dark-navy text-sm">{s.name}</span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 text-xs text-muted-text">{s.phone || s.email || '—'}</td>
+                        <td className="px-6 py-4 text-right font-bold text-dark-navy">LKR {(s.totalPurchased || 0).toLocaleString()}</td>
+                        <td className="px-6 py-4 text-right font-bold text-emerald-600">LKR {(s.totalPaid || 0).toLocaleString()}</td>
+                        <td className="px-6 py-4 text-right">
+                          <span className={`inline-block px-3 py-1 rounded-full text-xs font-bold ${hasDue ? 'bg-red-100 text-red-700 border border-red-200' : 'bg-emerald-100 text-emerald-700 border border-emerald-200'}`}>
+                            LKR {(s.balanceDue || 0).toLocaleString()}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSupplierToPay(s);
+                              setShowPayModal(true);
+                            }}
+                            className="bg-primary-blue hover:bg-blue-700 text-white font-semibold text-xs px-3.5 py-1.5 rounded-lg transition-colors shadow-sm"
+                          >
+                            Pay
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
           )}
         </div>
 
-        {/* Payment Modal for Summary View */}
+        {/* Record Payment Modal */}
         {showPayModal && (
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem' }}>
-            <div style={{ background: 'white', borderRadius: '20px', width: '100%', maxWidth: '420px', padding: '1.5rem' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
-                <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700 }}>Record Payment</h3>
-                <button onClick={() => { setShowPayModal(false); setSupplierToPay(null); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#7b6f69' }}><X size={20} /></button>
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl border border-card-border animate-in fade-in zoom-in duration-150">
+              <div className="flex items-center justify-between mb-4 border-b border-card-border pb-3">
+                <h3 className="text-lg font-bold text-dark-navy flex items-center gap-2">
+                  <DollarSign size={20} className="text-primary-blue" /> Record Payment
+                </h3>
+                <button
+                  onClick={() => { setShowPayModal(false); setSupplierToPay(null); }}
+                  className="p-1 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100"
+                >
+                  <X size={18} />
+                </button>
               </div>
-              <p style={{ margin: '0 0 1rem', fontSize: '0.85rem', color: '#7b6f69' }}>
-                Payment to <strong>{(supplierToPay || selectedSupplier)?.name}</strong> · Balance: <strong style={{ color: '#dc2626' }}>LKR {((supplierToPay || ledger)?.balanceDue || 0).toLocaleString()}</strong>
-              </p>
-              <div style={{ marginBottom: '1rem' }}>
-                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: '#7b6f69', marginBottom: '0.35rem', textTransform: 'uppercase' }}>Amount (LKR)</label>
-                <input type="number" value={payAmount} onChange={(e) => setPayAmount(e.target.value)} placeholder="0.00"
-                  style={{ width: '100%', padding: '0.7rem 1rem', borderRadius: '10px', border: '1px solid #eaded6', fontSize: '1.1rem', fontWeight: 700, outline: 'none', boxSizing: 'border-box' }} />
-              </div>
-              <div style={{ marginBottom: '1rem' }}>
-                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: '#7b6f69', marginBottom: '0.35rem', textTransform: 'uppercase' }}>Payment Method</label>
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                  {['cash', 'bank_transfer', 'cheque'].map((m) => (
-                    <button key={m} onClick={() => setPayMethod(m)}
-                      style={{ flex: 1, padding: '0.5rem', borderRadius: '8px', border: `1px solid ${payMethod === m ? '#d946a0' : '#eaded6'}`, background: payMethod === m ? '#fdf2f8' : 'white', color: payMethod === m ? '#d946a0' : '#7b6f69', fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer', textTransform: 'capitalize' }}>
-                      {m.replace('_', ' ')}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              
-              {payMethod === 'cheque' && (
-                <div style={{ background: '#fdf2f8', padding: '1rem', borderRadius: '12px', marginBottom: '1rem', border: '1px solid #fbcfe8' }}>
-                  <h4 style={{ margin: '0 0 0.75rem', fontSize: '0.85rem', color: '#d946a0' }}>Cheque Details</h4>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
-                    <div>
-                      <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 600, color: '#7b6f69', marginBottom: '0.25rem', textTransform: 'uppercase' }}>Cheque No. *</label>
-                      <input type="text" value={chequeDetails.chequeNumber} onChange={(e) => setChequeDetails({...chequeDetails, chequeNumber: e.target.value})} placeholder="0000123"
-                        style={{ width: '100%', padding: '0.5rem', borderRadius: '8px', border: '1px solid #eaded6', fontSize: '0.85rem', outline: 'none' }} />
-                    </div>
-                    <div>
-                      <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 600, color: '#7b6f69', marginBottom: '0.25rem', textTransform: 'uppercase' }}>Bank Name *</label>
-                      <input type="text" value={chequeDetails.bankName} onChange={(e) => setChequeDetails({...chequeDetails, bankName: e.target.value})} placeholder="BOC"
-                        style={{ width: '100%', padding: '0.5rem', borderRadius: '8px', border: '1px solid #eaded6', fontSize: '0.85rem', outline: 'none' }} />
-                    </div>
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-                    <div>
-                      <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 600, color: '#7b6f69', marginBottom: '0.25rem', textTransform: 'uppercase' }}>Cheque Date *</label>
-                      <input type="date" value={chequeDetails.chequeDate} onChange={(e) => setChequeDetails({...chequeDetails, chequeDate: e.target.value})}
-                        style={{ width: '100%', padding: '0.5rem', borderRadius: '8px', border: '1px solid #eaded6', fontSize: '0.85rem', outline: 'none' }} />
-                    </div>
-                    <div>
-                      <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 600, color: '#7b6f69', marginBottom: '0.25rem', textTransform: 'uppercase' }}>Account No.</label>
-                      <input type="text" value={chequeDetails.accountNumber} onChange={(e) => setChequeDetails({...chequeDetails, accountNumber: e.target.value})} placeholder="Optional"
-                        style={{ width: '100%', padding: '0.5rem', borderRadius: '8px', border: '1px solid #eaded6', fontSize: '0.85rem', outline: 'none' }} />
-                    </div>
-                  </div>
-                </div>
-              )}
 
-              <div style={{ marginBottom: '1.25rem' }}>
-                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: '#7b6f69', marginBottom: '0.35rem', textTransform: 'uppercase' }}>Note (optional)</label>
-                <input type="text" value={payDescription} onChange={(e) => setPayDescription(e.target.value)} placeholder="Payment reference..."
-                  style={{ width: '100%', padding: '0.6rem 1rem', borderRadius: '10px', border: '1px solid #eaded6', fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box' }} />
+              <p className="text-xs text-muted-text mb-4">
+                Payment to <strong className="text-dark-navy">{(supplierToPay || selectedSupplier)?.name}</strong> · Balance: <strong className="text-red-600">LKR {((supplierToPay || ledger)?.balanceDue || 0).toLocaleString()}</strong>
+              </p>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold text-muted-text uppercase mb-1">Amount (LKR) *</label>
+                  <input
+                    type="number"
+                    value={payAmount}
+                    onChange={(e) => setPayAmount(e.target.value)}
+                    placeholder="0.00"
+                    className="w-full border border-card-border rounded-xl px-3.5 py-2.5 text-base font-bold text-dark-navy focus:outline-none focus:ring-2 focus:ring-primary-blue"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-muted-text uppercase mb-1">Payment Method</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {['cash', 'bank_transfer', 'cheque'].map((m) => (
+                      <button
+                        key={m}
+                        type="button"
+                        onClick={() => setPayMethod(m)}
+                        className={`py-2 px-3 rounded-xl text-xs font-semibold border transition-all capitalize ${payMethod === m ? 'bg-primary-blue text-white border-primary-blue shadow-sm' : 'bg-white text-dark-navy border-card-border hover:bg-gray-50'}`}
+                      >
+                        {m.replace('_', ' ')}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {payMethod === 'cheque' && (
+                  <div className="bg-purple-50/50 border border-purple-100 rounded-xl p-3.5 space-y-3">
+                    <p className="text-xs font-bold text-purple-800">Cheque Details</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-[10px] font-semibold text-purple-700 uppercase mb-0.5">Cheque No. *</label>
+                        <input
+                          type="text"
+                          value={chequeDetails.chequeNumber}
+                          onChange={(e) => setChequeDetails({ ...chequeDetails, chequeNumber: e.target.value })}
+                          placeholder="000123"
+                          className="w-full border border-purple-200 rounded-lg px-2.5 py-1.5 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-purple-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-semibold text-purple-700 uppercase mb-0.5">Bank Name *</label>
+                        <input
+                          type="text"
+                          value={chequeDetails.bankName}
+                          onChange={(e) => setChequeDetails({ ...chequeDetails, bankName: e.target.value })}
+                          placeholder="Commercial Bank"
+                          className="w-full border border-purple-200 rounded-lg px-2.5 py-1.5 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-purple-500"
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-[10px] font-semibold text-purple-700 uppercase mb-0.5">Cheque Date *</label>
+                        <input
+                          type="date"
+                          value={chequeDetails.chequeDate}
+                          onChange={(e) => setChequeDetails({ ...chequeDetails, chequeDate: e.target.value })}
+                          className="w-full border border-purple-200 rounded-lg px-2.5 py-1.5 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-purple-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-semibold text-purple-700 uppercase mb-0.5">Account No.</label>
+                        <input
+                          type="text"
+                          value={chequeDetails.accountNumber}
+                          onChange={(e) => setChequeDetails({ ...chequeDetails, accountNumber: e.target.value })}
+                          placeholder="Optional"
+                          className="w-full border border-purple-200 rounded-lg px-2.5 py-1.5 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-purple-500"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-xs font-semibold text-muted-text uppercase mb-1">Notes / Reference</label>
+                  <input
+                    type="text"
+                    value={payDescription}
+                    onChange={(e) => setPayDescription(e.target.value)}
+                    placeholder="Optional payment reference..."
+                    className="w-full border border-card-border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-blue"
+                  />
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => { setShowPayModal(false); setSupplierToPay(null); }}
+                    className="px-4 py-2 text-sm text-muted-text hover:bg-gray-100 rounded-xl transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handlePayment}
+                    disabled={paying}
+                    className="px-5 py-2 text-sm bg-primary-blue hover:bg-blue-700 text-white font-semibold rounded-xl transition-colors shadow-sm disabled:opacity-50"
+                  >
+                    {paying ? 'Processing...' : `Pay LKR ${Number(payAmount || 0).toLocaleString()}`}
+                  </button>
+                </div>
               </div>
-              <button onClick={handlePayment} disabled={paying}
-                style={{ width: '100%', padding: '0.75rem', borderRadius: '12px', border: 'none', background: 'linear-gradient(135deg, #d946a0, #c026d3)', color: 'white', fontSize: '0.95rem', fontWeight: 700, cursor: 'pointer', opacity: paying ? 0.7 : 1 }}>
-                {paying ? 'Processing...' : `Pay LKR ${Number(payAmount || 0).toLocaleString()}`}
-              </button>
             </div>
           </div>
         )}
       </div>
-
-      <DeleteConfirmationModal
-        isOpen={deleteModalOpen}
-        onClose={() => { setDeleteModalOpen(false); setItemToDelete(null); }}
-        onConfirm={handleDeleteConfirm}
-        itemName="this transaction"
-      />
     </DashboardLayout>
   );
 };

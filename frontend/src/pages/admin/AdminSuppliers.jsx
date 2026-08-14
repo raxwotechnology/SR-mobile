@@ -1,11 +1,14 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Plus, Edit2, Trash2, Search, X, Users, Phone, Mail, MapPin, Building, DollarSign, Wallet, ArrowRight, Landmark } from 'lucide-react';
 import DashboardLayout from '../../components/DashboardLayout';
 import { getSuppliers, createSupplier, updateSupplier, deleteSupplier, getStores } from '../../services/api';
 import { toast } from 'react-toastify';
 import { adminNavGroups as navItems } from './adminNavItems';
+import { managerNavGroups } from '../storeOwner/managerNavItems';
 import DeleteConfirmationModal from '../../components/DeleteConfirmationModal';
 import useAdminStoreStore from '../../store/adminStoreStore';
+import useAuthStore from '../../store/authStore';
 
 const emptyForm = {
   name: '', company: '', contactPerson: '', email: '', phone: '', address: '', taxId: '', notes: '', status: 'active', storeId: '',
@@ -13,11 +16,15 @@ const emptyForm = {
 };
 
 const AdminSuppliers = () => {
+  const navigate = useNavigate();
+  const { user } = useAuthStore();
   const [suppliers, setSuppliers] = useState([]);
   const [stores, setStores] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const { selectedStoreId } = useAdminStoreStore();
+
+  const currentNavItems = user?.role === 'manager' ? managerNavGroups : navItems;
   const [search, setSearch] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -127,7 +134,7 @@ const AdminSuppliers = () => {
 
   if (loading) {
     return (
-      <DashboardLayout navItems={navItems} title="Supplier Management">
+      <DashboardLayout navItems={currentNavItems} title="Supplier Management">
         <div className="flex items-center justify-center h-64">
           <div className="w-10 h-10 border-4 border-primary-blue border-t-transparent rounded-full animate-spin" />
         </div>
@@ -136,7 +143,7 @@ const AdminSuppliers = () => {
   }
 
   return (
-    <DashboardLayout navItems={navItems} title="Supplier Management">
+    <DashboardLayout navItems={currentNavItems} title="Supplier Management">
       <div className="animate-fade-in">
         <div className="flex items-center justify-between mb-6">
           <div>
@@ -170,7 +177,10 @@ const AdminSuppliers = () => {
            <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm flex items-center justify-center border-dashed border-2 text-muted-text">
              <div className="text-center">
                <p className="text-xs">Manage payments in</p>
-               <button className="text-primary-blue font-bold text-sm mt-1 flex items-center gap-1 hover:underline">
+               <button 
+                 onClick={() => navigate(user?.role === 'manager' ? '/manager/supplier-payments' : '/admin/supplier-payments')}
+                 className="text-primary-blue font-bold text-sm mt-1 flex items-center gap-1 hover:underline cursor-pointer"
+               >
                  Supplier Payments <ArrowRight size={14} />
                </button>
              </div>

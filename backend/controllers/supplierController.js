@@ -2,9 +2,12 @@ const Supplier = require('../models/Supplier');
 const Store = require('../models/Store');
 
 const resolveStoreId = async (req) => {
-  if (req.user.role === 'manager') {
+  if (req.user?.assignedStore) {
+    return req.user.assignedStore;
+  }
+  if (req.user?.role === 'manager') {
     const store = await Store.findOne({ managerId: req.user._id }).select('_id').lean();
-    return store?._id || null;
+    if (store?._id) return store._id;
   }
   return req.body?.storeId || req.query?.storeId || null;
 };
@@ -15,13 +18,6 @@ const resolveStoreId = async (req) => {
 const listSuppliers = async (req, res, next) => {
   try {
     const storeId = await resolveStoreId(req);
-    const isSuper = req.user.email === 'admin@mobilehub.com' || req.user.isSuperAdmin;
-    const isAdmin = req.user.role === 'admin';
-
-    if (!storeId && !isSuper && !isAdmin) {
-      res.status(400);
-      return next(new Error('storeId is required'));
-    }
 
     const filter = {};
     if (storeId) {

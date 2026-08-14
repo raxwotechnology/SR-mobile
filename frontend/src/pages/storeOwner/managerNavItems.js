@@ -33,6 +33,7 @@ const managerNavGroups = [
   {
     label: 'Suppliers & Payments',
     items: [
+      { path: '/manager/suppliers',         label: 'Suppliers List',    icon: Users },
       { path: '/manager/supplier-payments', label: 'Supplier Payments', icon: Wallet },
     ],
   },
